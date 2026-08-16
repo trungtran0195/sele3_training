@@ -1,0 +1,147 @@
+classDiagram
+    %% ===============================
+    %% CONFIGURATION LAYER
+    %% ===============================
+    class Configuration {
+        +String browser
+        +String browserVersion
+        +String baseUrl
+        +boolean headless
+        +boolean maximize
+        +String remoteUrl
+        +long timeOut
+        +long pageLoadTimeout
+        +boolean proxyEnabled
+        +boolean clickViaJs
+        +void loadFromEnvironment()
+    }
+
+    %% ===============================
+    %% DRIVER MANAGEMENT CORE
+    %% ===============================
+    class DriverManager {
+        -static ThreadLocal<WebDriver> driver
+        -static Configuration config
+        +void setDriver(WebDriver)
+        +WebDriver getDriver()
+        +void quitDriver()
+        +void createDriver()
+        +Element findElement(By)
+    }
+
+    class DriverFactory { +static WebDriver createDriver(Configuration) }
+    class DriverContext { +static WebDriver getDriver() +static void quit() }
+    class ChromeManager { +static WebDriver create(Configuration) }
+    class FirefoxManager { +static WebDriver create(Configuration) }
+    class EdgeManager { +static WebDriver create(Configuration) }
+
+    %% ===============================
+    %% ELEMENT / WEBELEMENT
+    %% ===============================
+    class Element {
+        +void click()
+        +void sendKeys(String)
+        +String getText()
+        +String getAttribute(String)
+        +boolean isDisplayed()
+        +boolean isEnabled()
+        +boolean isSelected()
+        +Element findElement(By)
+        +List<Element> findElements(By)
+        +Element findBelow(Element)
+        +Element findAbove(Element)
+        +Element findNear(Element)
+        +void handleStale(Runnable action)
+        +void waitForClickable(long timeout)
+        +void waitForEnable(long timeout)
+        +void waitForElement(long timeout)
+        +void scrollTo()
+        +void verifyText(String expected)
+        +void verifyTextWithRetry(String expected, int maxRetries, long intervalMs)
+    }
+
+    %% ===============================
+    %% PAGE OBJECT LAYER
+    %% ===============================
+    class BasePage {
+        +void open(String url)
+    }
+
+    class LoginPage {
+        +Element usernameField
+        +Element passwordField
+        +Element loginButton
+        +void enterUsername(String)
+        +void enterPassword(String)
+        +void clickLogin()
+        +void login(String, String)
+    }
+
+    BasePage <|-- LoginPage
+    LoginPage --> Element : uses
+
+    %% ===============================
+    %% ASSERTION LAYER
+    %% ===============================
+    class AssertionManager {
+        +static void assertTrue(boolean condition, String message)
+        +static void assertEquals(Object actual, Object expected, String message)
+        +static void softAssertTrue(boolean condition, String message)
+        +static void softAssertEquals(Object actual, Object expected, String message)
+        +static void assertAll()
+        +static void assertWithRetry(Runnable assertion, int maxRetries, long intervalMs)
+    }
+
+    %% ===============================
+    %% TEST BASE / TEST RUNNER
+    %% ===============================
+    class TestBase {
+        +void setup()
+        +abstract void runTest()
+        +void tearDown()
+        +AssertionManager assertions
+        +List<Listener> listeners
+    }
+
+    class LoginTest {
+        +void runTest()
+    }
+
+    TestBase <|-- LoginTest
+    TestBase --> AssertionManager : uses assertions
+    TestBase --> Listener : notifies events
+    Element --> AssertionManager : optional retry validation
+
+    %% ===============================
+    %% REPORTER / LISTENER
+    %% ===============================
+    class Listener {
+        +void onTestStart(TestBase)
+        +void onTestSuccess(TestBase)
+        +void onTestFailure(TestBase, Exception)
+        +void onTestFinish(TestBase)
+    }
+
+    class Reporter {
+        +void logSuccess(TestBase)
+        +void logFailure(TestBase, Exception)
+        +void logSoftAssertionFailure(TestBase, String)
+        +void generateReport()
+    }
+
+    Listener --> Reporter : reports events
+
+    %% ===============================
+    %% RELATIONSHIPS
+    %% ===============================
+    Configuration --> DriverManager : provides settings
+    DriverManager *-- WebDriver : owns per-thread driver
+    DriverManager --> DriverFactory : uses
+    DriverFactory --> ChromeManager
+    DriverFactory --> FirefoxManager
+    DriverFactory --> EdgeManager
+    DriverManager --> DriverContext : accessible via
+    DriverContext --> WebDriver : returns
+
+    DriverManager --> Element : creates/finds elements
+    Element --> WebDriver : interacts with browser session
