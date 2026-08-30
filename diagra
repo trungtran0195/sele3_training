@@ -3,42 +3,62 @@ classDiagram
     %% CONFIGURATION LAYER
     %% ===============================
     class Configuration {
-        +String browser
-        +String browserVersion
+        +Browser browser
         +String baseUrl
         +boolean headless
-        +boolean maximize
-        +String remoteUrl
-        +long timeOut
-        +long pageLoadTimeout
-        +boolean proxyEnabled
-        +boolean clickViaJs
-        +void loadFromEnvironment()
+        +String remote
+        +boolean startMaximized
+        +String browserSize
+        +Duration timeout
+        +Duration pageLoadTimeout
+        +Duration pollingInterval
+        +PageLoadStrategy pageLoadStrategy
+        +MutableCapabilities capabilities
+        +boolean isRemote()
+    }
+
+    class ConfigLoader {
+        +static Configuration fromJsonFile(String jsonFile)
+        +static Configuration fromSystemProperties()
+        -static Configuration load(String file)
     }
 
     %% ===============================
     %% DRIVER MANAGEMENT CORE
     %% ===============================
     class DriverManager {
-        -static ThreadLocal<WebDriver> driver
-        -static Configuration config
-        +void setDriver(WebDriver)
-        +WebDriver getDriver()
-        +void quitDriver()
-        +void createDriver()
-        +Element findElement(By)
+        -static ThreadLocal~WebDriver~ driver
+        -static ThreadLocal~Configuration~ config
+        +static void setConfig(Configuration)
+        +static Configuration getConfig()
+        +static void createDriver()
+        +static WebDriver getDriver()
+        +static void quitDriver()
+        +static void cleanup()
     }
 
     class DriverFactory { +static WebDriver createDriver(Configuration) }
-    class DriverContext { +static WebDriver getDriver() +static void quit() }
+    class DriverContext {
+        +static WebDriver getDriver()
+        +static Configuration getConfig()
+    }
     class ChromeManager { +static WebDriver create(Configuration) }
     class FirefoxManager { +static WebDriver create(Configuration) }
     class EdgeManager { +static WebDriver create(Configuration) }
+
+    class Browser {
+        <<enumeration>>
+        CHROME
+        FIREFOX
+        EDGE
+        +static Browser from(String value)
+    }
 
     %% ===============================
     %% ELEMENT / WEBELEMENT
     %% ===============================
     class Element {
+        -By locator
         +void click()
         +void sendKeys(String)
         +String getText()
@@ -46,19 +66,29 @@ classDiagram
         +boolean isDisplayed()
         +boolean isEnabled()
         +boolean isSelected()
-        +Element findElement(By)
-        +List<Element> findElements(By)
-        +Element findBelow(Element)
-        +Element findAbove(Element)
-        +Element findNear(Element)
-        +void handleStale(Runnable action)
+        +Element findElement(By locator)
+        +List<Element> findElements(By locator)
+        +Element findElement(LocatorType type, String value)
+        +List<Element> findElements(LocatorType type, String value)
+        -WebElement locateVisible(By locator)
         +void waitForClickable(long timeout)
         +void waitForEnable(long timeout)
-        +void waitForElement(long timeout)
         +void scrollTo()
-        +void verifyText(String expected)
-        +void verifyTextWithRetry(String expected, int maxRetries, long intervalMs)
+        +void verifyText(String expected, long intervalMs)
     }
+
+    class LocatorType {
+        <<enumeration>>
+        XPATH
+        CLASS_NAME
+        ID
+        CSS_SELECTOR
+        NAME
+        TAG_NAME
+        LINK_TEXT
+    }
+
+    Element ..> LocatorType : uses locator strategy
 
     %% ===============================
     %% PAGE OBJECT LAYER
@@ -84,23 +114,21 @@ classDiagram
     %% ASSERTION LAYER
     %% ===============================
     class AssertionManager {
-        +static void assertTrue(boolean condition, String message)
-        +static void assertEquals(Object actual, Object expected, String message)
-        +static void softAssertTrue(boolean condition, String message)
-        +static void softAssertEquals(Object actual, Object expected, String message)
+        +static void assertTrue(BooleanSupplier condition, String message)
+        +static void assertEquals(String actual, String expected, String message)
+        +static void softAssertTrue(BooleanSupplier condition, String message)
+        +static void softAssertEquals(String actual, String expected, String message)
         +static void assertAll()
-        +static void assertWithRetry(Runnable assertion, int maxRetries, long intervalMs)
     }
+
 
     %% ===============================
     %% TEST BASE / TEST RUNNER
     %% ===============================
     class TestBase {
-        +void setup()
+        +final void setup()
         +abstract void runTest()
-        +void tearDown()
-        +AssertionManager assertions
-        +List<Listener> listeners
+        +final void tearDown()
     }
 
     class LoginTest {
@@ -108,40 +136,94 @@ classDiagram
     }
 
     TestBase <|-- LoginTest
-    TestBase --> AssertionManager : uses assertions
-    TestBase --> Listener : notifies events
-    Element --> AssertionManager : optional retry validation
+    TestBase ..> AssertionManager : uses assertions
+    Element --> AssertionManager : validates dynamic state
 
     %% ===============================
     %% REPORTER / LISTENER
     %% ===============================
     class Listener {
-        +void onTestStart(TestBase)
-        +void onTestSuccess(TestBase)
-        +void onTestFailure(TestBase, Exception)
-        +void onTestFinish(TestBase)
+        <<interface>>
+        +void onTestStart(TestEvent event)
+        +void onTestSuccess(TestEvent event)
+        +void onTestFailure(TestEvent event)
+        +void onTestSkipped(TestEvent event)
+        +void onRunFinish(TestEvent event)
     }
 
     class Reporter {
-        +void logSuccess(TestBase)
-        +void logFailure(TestBase, Exception)
-        +void logSoftAssertionFailure(TestBase, String)
-        +void generateReport()
+        <<interface>>
+        +void startTest(TestEvent event)
+        +void logSuccess(TestEvent event)
+        +void logFailure(TestEvent event)
+        +void logSkipped(TestEvent event)
+        +void logSoftAssertionFailure(TestEvent event, String message)
+        +void attachScreenshot(TestEvent event, byte[] screenshot)
+        +void endTest(TestEvent event)
+        +void flush()
     }
 
-    Listener --> Reporter : reports events
+    class TestEvent {
+        +String testId
+        +String testName
+        +String threadName
+        +TestStatus status
+        +Throwable error
+        +Map~String,Object~ attributes
+    }
+
+    class TestStatus {
+        <<enumeration>>
+        STARTED
+        PASSED
+        FAILED
+        SKIPPED
+    }
+
+    class DefaultListener {
+        -List~Reporter~ reporters
+    }
+
+    class TestNGListenerAdapter
+    class JUnitListenerAdapter
+    class CustomRunnerAdapter
+    class AllureReporter
+    class ExtentReporter
+    class ConsoleReporter
+
+    DefaultListener ..|> Listener
+    DefaultListener o-- Reporter : delegates to configured reporters
+    DefaultListener ..> DriverContext : captures failure screenshot
+    Listener ..> TestEvent : receives
+    Reporter ..> TestEvent : reports
+    TestEvent --> TestStatus : has status
+
+    TestNGListenerAdapter --> Listener : converts TestNG events
+    JUnitListenerAdapter --> Listener : converts JUnit events
+    CustomRunnerAdapter --> Listener : converts runner events
+
+    AllureReporter ..|> Reporter
+    ExtentReporter ..|> Reporter
+    ConsoleReporter ..|> Reporter
 
     %% ===============================
     %% RELATIONSHIPS
     %% ===============================
-    Configuration --> DriverManager : provides settings
-    DriverManager *-- WebDriver : owns per-thread driver
-    DriverManager --> DriverFactory : uses
-    DriverFactory --> ChromeManager
-    DriverFactory --> FirefoxManager
-    DriverFactory --> EdgeManager
-    DriverManager --> DriverContext : accessible via
-    DriverContext --> WebDriver : returns
+    ConfigLoader ..> Configuration : creates
+    Configuration --> Browser : selects browser
+    TestBase ..> ConfigLoader : loads per-test config
+    TestBase ..> DriverManager : initializes and cleans up
 
-    DriverManager --> Element : creates/finds elements
+    DriverManager *-- Configuration : owns per-thread config
+    DriverManager *-- WebDriver : owns per-thread driver
+    DriverManager ..> DriverFactory : delegates creation
+    DriverFactory ..> Browser : dispatches by enum
+    DriverFactory ..> ChromeManager
+    DriverFactory ..> FirefoxManager
+    DriverFactory ..> EdgeManager
+    DriverContext ..> DriverManager : delegates access
+    DriverContext --> WebDriver : returns current thread driver
+    DriverContext --> Configuration : returns current thread config
+
+    Element ..> DriverContext : gets current driver/config
     Element --> WebDriver : interacts with browser session

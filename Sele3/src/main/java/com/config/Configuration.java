@@ -1,8 +1,10 @@
 package com.config;
 
+import com.driver.browser.Browser;
 import lombok.Getter;
 import lombok.Setter;
 import org.openqa.selenium.MutableCapabilities;
+import org.openqa.selenium.PageLoadStrategy;
 import org.openqa.selenium.remote.DesiredCapabilities;
 
 import java.time.Duration;
@@ -10,30 +12,37 @@ import java.time.Duration;
 @Getter
 @Setter
 public class Configuration {
-    private String browser;
-    private boolean headless;
-    private String baseUrl;
-    private String remote;
-    private boolean startMaximized;
-    private String browserSize;
-    private Duration timeout;
-    private Duration pageLoadTimeout;
-    private Duration pollingInterval;
-    private MutableCapabilities capabilities;
+    private Browser browser = Browser.CHROME;
+    private boolean headless = false;
+    private String baseUrl = "http://localhost:8080";
+    private String remote = "";
+    private boolean startMaximized = true;
+    private String browserSize = "1366x768";
+    private Duration timeout = Duration.ofSeconds(4);
+    private Duration pageLoadTimeout = Duration.ofSeconds(30);
+    private Duration pollingInterval = Duration.ofMillis(200);
+    private PageLoadStrategy pageLoadStrategy = PageLoadStrategy.NORMAL;
+    private MutableCapabilities capabilities = new DesiredCapabilities();
 
-    public Configuration(boolean initial) {
-        if (initial) {
-            this.browser = System.getProperty(ConfigKey.BROWSER, "chrome");
-            this.headless = Boolean.parseBoolean(System.getProperty(ConfigKey.HEADLESS, "false"));
-            this.baseUrl = System.getProperty(ConfigKey.BASE_URL, "http://localhost:8080");
-            this.remote = System.getProperty(ConfigKey.REMOTE, "");
-            this.startMaximized = Boolean.parseBoolean(System.getProperty(ConfigKey.START_MAXIMIZED, "true"));
-            this.browserSize = System.getProperty(ConfigKey.BROWSER_SIZE, "1366x768");
-            this.timeout = Duration.ofMillis(Long.parseLong(System.getProperty(ConfigKey.TIMEOUT, "4000")));
-            this.pageLoadTimeout = Duration.ofMillis(Long.parseLong(System.getProperty(ConfigKey.PAGE_LOAD_TIMEOUT, "30000")));
-            this.pollingInterval = Duration.ofMillis(Long.parseLong(System.getProperty(ConfigKey.POLLING_INTERVAL, "200")));
-            this.capabilities = new DesiredCapabilities();
-        }
+    public Configuration() {
+        // Defaults are initialized at field declaration so Gson preserves them
+        // when optional properties are absent from the JSON file.
+    }
+
+    public Configuration(Configuration source) {
+        this.browser = source.browser;
+        this.headless = source.headless;
+        this.baseUrl = source.baseUrl;
+        this.remote = source.remote;
+        this.startMaximized = source.startMaximized;
+        this.browserSize = source.browserSize;
+        this.timeout = source.timeout;
+        this.pageLoadTimeout = source.pageLoadTimeout;
+        this.pollingInterval = source.pollingInterval;
+        this.pageLoadStrategy = source.pageLoadStrategy;
+        this.capabilities = source.capabilities == null
+                ? new DesiredCapabilities()
+                : new DesiredCapabilities(source.capabilities);
     }
 
     public boolean isRemote() {

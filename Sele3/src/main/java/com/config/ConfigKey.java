@@ -1,6 +1,10 @@
 package com.config;
 
-public class ConfigKey {
+public final class ConfigKey {
+
+    private ConfigKey() {
+        throw new UnsupportedOperationException("Utility class");
+    }
 
     public static final String BROWSER = "browser";
     public static final String HEADLESS = "headless";
