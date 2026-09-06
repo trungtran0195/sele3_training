@@ -3,25 +3,34 @@ classDiagram
     %% CONFIGURATION LAYER
     %% ===============================
     class Configuration {
-        +Browser browser
-        +String baseUrl
-        +boolean headless
-        +String remote
-        +boolean startMaximized
-        +String browserSize
-        +Duration timeout
-        +Duration pageLoadTimeout
-        +Duration pollingInterval
-        +PageLoadStrategy pageLoadStrategy
-        +MutableCapabilities capabilities
+        <<immutable>>
+        -final Browser browser
+        -final String baseUrl
+        -final boolean headless
+        -final String remote
+        -final boolean startMaximized
+        -final String browserSize
+        -final Duration timeout
+        -final Duration pageLoadTimeout
+        -final Duration pollingInterval
+        -final PageLoadStrategy pageLoadStrategy
+        -final Capabilities capabilities
+        ~static ConfigurationBuilder builder()
         +boolean isRemote()
     }
 
     class ConfigLoader {
         +static Configuration fromJsonFile(String jsonFile)
         +static Configuration fromSystemProperties()
-        -static Configuration load(String file)
+        -static MutableConfiguration load(String file)
+        -static Configuration createValidatedConfiguration(MutableConfiguration)
     }
+
+    class MutableConfiguration {
+        <<DTO>>
+    }
+
+    ConfigLoader *-- MutableConfiguration : loads and validates
 
     %% ===============================
     %% DRIVER MANAGEMENT CORE
@@ -42,9 +51,10 @@ classDiagram
         +static WebDriver getDriver()
         +static Configuration getConfig()
     }
-    class ChromeManager { +static WebDriver create(Configuration) }
-    class FirefoxManager { +static WebDriver create(Configuration) }
-    class EdgeManager { +static WebDriver create(Configuration) }
+    class BrowserManager {
+        -static Map~Browser, Function~Configuration, WebDriver~~ creators
+        +static WebDriver create(Browser, Configuration)
+    }
 
     class Browser {
         <<enumeration>>
@@ -217,10 +227,8 @@ classDiagram
     DriverManager *-- Configuration : owns per-thread config
     DriverManager *-- WebDriver : owns per-thread driver
     DriverManager ..> DriverFactory : delegates creation
-    DriverFactory ..> Browser : dispatches by enum
-    DriverFactory ..> ChromeManager
-    DriverFactory ..> FirefoxManager
-    DriverFactory ..> EdgeManager
+    DriverFactory ..> BrowserManager : delegates creation
+    BrowserManager ..> Browser : selects creator from map
     DriverContext ..> DriverManager : delegates access
     DriverContext --> WebDriver : returns current thread driver
     DriverContext --> Configuration : returns current thread config

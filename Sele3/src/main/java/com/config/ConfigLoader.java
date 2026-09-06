@@ -1,11 +1,11 @@
 package com.config;
 
+import com.config.adapter.DurationTypeAdapter;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonParseException;
-import com.driver.browser.Browser;
+import org.openqa.selenium.ImmutableCapabilities;
 import org.openqa.selenium.PageLoadStrategy;
-import org.openqa.selenium.remote.DesiredCapabilities;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -15,69 +15,97 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.HashMap;
 import java.util.Locale;
-import java.util.Objects;
+import java.util.Map;
 import java.util.regex.Pattern;
 
-public class ConfigLoader {
+public final class ConfigLoader {
 
     private static final Pattern BROWSER_SIZE = Pattern.compile("[1-9]\\d*x[1-9]\\d*");
     private static final Gson GSON = new GsonBuilder()
             .registerTypeAdapter(Duration.class, new DurationTypeAdapter())
-            .registerTypeAdapter(Browser.class, new BrowserTypeAdapter())
             .create();
 
-    private ConfigLoader() {
-        throw new UnsupportedOperationException("Utility class");
-    }
-
     public static Configuration fromJsonFile(String jsonFile) {
-        Configuration config = load(jsonFile);
+        MutableConfiguration config = load(jsonFile);
         applySystemPropertyOverrides(config);
-        validate(config);
-        return config;
+        return createValidatedConfiguration(config);
     }
 
     public static Configuration fromSystemProperties() {
-        Configuration config = new Configuration();
+        MutableConfiguration config = new MutableConfiguration();
         applySystemPropertyOverrides(config);
-        validate(config);
-        return config;
+        return createValidatedConfiguration(config);
     }
 
-    private static Configuration load(String file) {
-        Objects.requireNonNull(file, "Configuration file must not be null");
+    private static MutableConfiguration load(String file) {
+        if (file == null || file.isBlank()) {
+            throw new ConfigurationException("Configuration file must not be blank");
+        }
+
         Path path = Path.of(file);
         try (BufferedReader reader = Files.newBufferedReader(path, StandardCharsets.UTF_8)) {
-            Configuration config = GSON.fromJson(reader, Configuration.class);
+            MutableConfiguration config = GSON.fromJson(reader, MutableConfiguration.class);
             if (config == null) {
-                throw new IllegalArgumentException("Configuration file is empty: " + path);
+                throw new ConfigurationException("Configuration file is empty: " + path);
             }
             return config;
         } catch (IOException | JsonParseException e) {
-            throw new RuntimeException("Cannot load config: " + file, e);
+            throw new ConfigurationException("Cannot load config: " + file, e);
         }
     }
 
-    private static void applySystemPropertyOverrides(Configuration config) {
-        config.setBrowser(browserProperty(ConfigKey.BROWSER, config.getBrowser()));
-        config.setHeadless(booleanProperty(ConfigKey.HEADLESS, config.isHeadless()));
-        config.setRemote(textProperty(ConfigKey.REMOTE, config.getRemote()));
-        config.setBaseUrl(textProperty(ConfigKey.BASE_URL, config.getBaseUrl()));
-        config.setBrowserSize(textProperty(ConfigKey.BROWSER_SIZE, config.getBrowserSize()));
-        config.setStartMaximized(booleanProperty(ConfigKey.START_MAXIMIZED, config.isStartMaximized()));
-        config.setTimeout(durationProperty(ConfigKey.TIMEOUT, config.getTimeout()));
-        config.setPageLoadTimeout(durationProperty(ConfigKey.PAGE_LOAD_TIMEOUT, config.getPageLoadTimeout()));
-        config.setPollingInterval(durationProperty(ConfigKey.POLLING_INTERVAL, config.getPollingInterval()));
+    private static void applySystemPropertyOverrides(MutableConfiguration config) {
+        config.browser = browserProperty(ConfigKey.BROWSER, config.browser);
+        config.headless = booleanProperty(ConfigKey.HEADLESS, config.headless);
+        config.remote = textProperty(ConfigKey.REMOTE, config.remote);
+        config.baseUrl = textProperty(ConfigKey.BASE_URL, config.baseUrl);
+        config.browserSize = textProperty(ConfigKey.BROWSER_SIZE, config.browserSize);
+        config.startMaximized = booleanProperty(ConfigKey.START_MAXIMIZED, config.startMaximized);
+        config.timeout = durationProperty(ConfigKey.TIMEOUT, config.timeout);
+        config.pageLoadTimeout = durationProperty(ConfigKey.PAGE_LOAD_TIMEOUT, config.pageLoadTimeout);
+        config.pollingInterval = durationProperty(ConfigKey.POLLING_INTERVAL, config.pollingInterval);
+        config.pageLoadStrategy = textProperty(ConfigKey.PAGE_LOAD_STRATEGY, config.pageLoadStrategy);
+    }
 
-        String strategy = System.getProperty(ConfigKey.PAGE_LOAD_STRATEGY);
-        if (strategy != null) {
-            try {
-                config.setPageLoadStrategy(PageLoadStrategy.fromString(strategy.trim().toLowerCase(Locale.ROOT)));
-            } catch (IllegalArgumentException e) {
-                throw invalidProperty(ConfigKey.PAGE_LOAD_STRATEGY, strategy, e);
-            }
+    private static Configuration createValidatedConfiguration(MutableConfiguration config) {
+        if (config.browser == null) {
+            throw new ConfigurationException(ConfigKey.BROWSER + " must not be null");
         }
+        requireHttpUrl(ConfigKey.BASE_URL, config.baseUrl);
+        if (config.remote != null && !config.remote.isBlank()) {
+            requireHttpUrl(ConfigKey.REMOTE, config.remote);
+        }
+        requireNonBlank(ConfigKey.BROWSER_SIZE, config.browserSize);
+        if (!BROWSER_SIZE.matcher(config.browserSize).matches()) {
+            throw new ConfigurationException("browserSize must use WIDTHxHEIGHT format: " + config.browserSize);
+        }
+        requirePositive(ConfigKey.TIMEOUT, config.timeout);
+        requirePositive(ConfigKey.PAGE_LOAD_TIMEOUT, config.pageLoadTimeout);
+        requirePositive(ConfigKey.POLLING_INTERVAL, config.pollingInterval);
+        if (config.pollingInterval.compareTo(config.timeout) > 0) {
+            throw new ConfigurationException("pollingInterval must not exceed timeout");
+        }
+
+        PageLoadStrategy pageLoadStrategy = pageLoadStrategy(config.pageLoadStrategy);
+        Map<String, Object> capabilities = config.capabilities == null
+                ? Map.of()
+                : Map.copyOf(config.capabilities);
+
+        return Configuration.builder()
+                .browser(config.browser)
+                .headless(config.headless)
+                .baseUrl(config.baseUrl)
+                .remote(config.remote == null ? "" : config.remote)
+                .startMaximized(config.startMaximized)
+                .browserSize(config.browserSize)
+                .timeout(config.timeout)
+                .pageLoadTimeout(config.pageLoadTimeout)
+                .pollingInterval(config.pollingInterval)
+                .pageLoadStrategy(pageLoadStrategy)
+                .capabilities(new ImmutableCapabilities(capabilities))
+                .build();
     }
 
     private static String textProperty(String key, String fallback) {
@@ -97,7 +125,14 @@ public class ConfigLoader {
 
     private static Browser browserProperty(String key, Browser fallback) {
         String value = System.getProperty(key);
-        return value == null ? fallback : Browser.from(value);
+        if (value == null) {
+            return fallback;
+        }
+        try {
+            return Browser.from(value);
+        } catch (ConfigurationException e) {
+            throw invalidProperty(key, value, e);
+        }
     }
 
     private static Duration durationProperty(String key, Duration fallback) {
@@ -112,58 +147,55 @@ public class ConfigLoader {
         }
     }
 
-    private static IllegalArgumentException invalidProperty(String key, String value, Exception cause) {
-        return new IllegalArgumentException("Invalid system property '" + key + "': " + value, cause);
-    }
-
-    private static void validate(Configuration config) {
-        if (config.getBrowser() == null) {
-            throw new IllegalArgumentException(ConfigKey.BROWSER + " must not be null");
-        }
-        requireText(ConfigKey.BASE_URL, config.getBaseUrl());
-        requireHttpUrl(ConfigKey.BASE_URL, config.getBaseUrl());
-        if (config.isRemote()) {
-            requireHttpUrl(ConfigKey.REMOTE, config.getRemote());
-        }
-        requireText(ConfigKey.BROWSER_SIZE, config.getBrowserSize());
-        if (!BROWSER_SIZE.matcher(config.getBrowserSize()).matches()) {
-            throw new IllegalArgumentException("browserSize must use WIDTHxHEIGHT format: " + config.getBrowserSize());
-        }
-        requirePositive(ConfigKey.TIMEOUT, config.getTimeout());
-        requirePositive(ConfigKey.PAGE_LOAD_TIMEOUT, config.getPageLoadTimeout());
-        requirePositive(ConfigKey.POLLING_INTERVAL, config.getPollingInterval());
-        if (config.getPollingInterval().compareTo(config.getTimeout()) > 0) {
-            throw new IllegalArgumentException("pollingInterval must not exceed timeout");
-        }
-        if (config.getPageLoadStrategy() == null) {
-            config.setPageLoadStrategy(PageLoadStrategy.NORMAL);
-        }
-        if (config.getCapabilities() == null) {
-            config.setCapabilities(new DesiredCapabilities());
+    private static PageLoadStrategy pageLoadStrategy(String value) {
+        requireNonBlank(ConfigKey.PAGE_LOAD_STRATEGY, value);
+        try {
+            return PageLoadStrategy.fromString(value.trim().toLowerCase(Locale.ROOT));
+        } catch (IllegalArgumentException e) {
+            throw new ConfigurationException("Invalid pageLoadStrategy: " + value, e);
         }
     }
 
-    private static void requireText(String key, String value) {
+    private static ConfigurationException invalidProperty(String key, String value, Throwable cause) {
+        return new ConfigurationException("Invalid system property '" + key + "': " + value, cause);
+    }
+
+    private static void requireNonBlank(String key, String value) {
         if (value == null || value.isBlank()) {
-            throw new IllegalArgumentException(key + " must not be blank");
+            throw new ConfigurationException(key + " must not be blank");
         }
     }
 
     private static void requirePositive(String key, Duration value) {
         if (value == null || value.isZero() || value.isNegative()) {
-            throw new IllegalArgumentException(key + " must be greater than zero");
+            throw new ConfigurationException(key + " must be greater than zero");
         }
     }
 
     private static void requireHttpUrl(String key, String value) {
+        requireNonBlank(key, value);
         try {
             URI uri = new URI(value);
             String scheme = uri.getScheme();
             if (uri.getHost() == null || !("http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme))) {
-                throw new IllegalArgumentException(key + " must be an absolute HTTP(S) URL: " + value);
+                throw new ConfigurationException(key + " must be an absolute HTTP(S) URL: " + value);
             }
         } catch (URISyntaxException e) {
-            throw new IllegalArgumentException(key + " is not a valid URL: " + value, e);
+            throw new ConfigurationException(key + " is not a valid URL: " + value, e);
         }
+    }
+
+    private static final class MutableConfiguration {
+        private Browser browser = Browser.CHROME;
+        private boolean headless;
+        private String baseUrl = "http://localhost:8080";
+        private String remote = "";
+        private boolean startMaximized = true;
+        private String browserSize = "1366x768";
+        private Duration timeout = Duration.ofSeconds(4);
+        private Duration pageLoadTimeout = Duration.ofSeconds(30);
+        private Duration pollingInterval = Duration.ofMillis(200);
+        private String pageLoadStrategy = "normal";
+        private Map<String, Object> capabilities = new HashMap<>();
     }
 }
