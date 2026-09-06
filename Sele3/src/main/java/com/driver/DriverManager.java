@@ -5,9 +5,11 @@ import org.openqa.selenium.Dimension;
 import org.openqa.selenium.WebDriver;
 
 import java.util.Objects;
+import java.util.logging.Logger;
 
 public final class DriverManager {
 
+    private static final Logger LOGGER = Logger.getLogger(DriverManager.class.getName());
     private static final ThreadLocal<WebDriver> DRIVER = new ThreadLocal<>();
     private static final ThreadLocal<Configuration> CONFIG = new ThreadLocal<>();
 
@@ -25,27 +27,19 @@ public final class DriverManager {
 
     public static void createDriver() {
         if (DRIVER.get() != null) {
-            throw new IllegalStateException("A WebDriver is already active for this thread");
+            LOGGER.warning("A WebDriver is already active for this thread");
+            return;
         }
 
-        Configuration configuration = Objects.requireNonNull(
-                getConfig(), "Configuration has not been initialized for this thread");
-        WebDriver webDriver = null;
-        try {
-            webDriver = DriverFactory.createDriver(configuration);
-            configureSession(webDriver, configuration);
-            DRIVER.set(webDriver);
-        } catch (RuntimeException e) {
-            if (webDriver != null) {
-                try {
-                    webDriver.quit();
-                } catch (RuntimeException quitError) {
-                    e.addSuppressed(quitError);
-                }
-            }
-            throw new IllegalStateException("Unable to create WebDriver for browser: "
-                    + configuration.getBrowser(), e);
+        Configuration configuration = getConfig();
+        if (configuration == null) {
+            LOGGER.severe("Configuration has not been initialized for this thread");
+            return;
         }
+
+        WebDriver webDriver = DriverFactory.createDriver(configuration);
+        DRIVER.set(webDriver);
+        configureSession(webDriver, configuration);
     }
 
     public static WebDriver getDriver() {
