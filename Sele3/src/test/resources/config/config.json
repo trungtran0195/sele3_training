@@ -1,0 +1,30 @@
+{
+  "driver": {
+    "browser": "chrome",
+    "headless": false,
+    "baseUrl": "http://localhost:8080",
+    "remoteUrl": "",
+    "startMaximized": true,
+    "browserSize": "1366x768",
+    "pageLoadTimeout": 30000,
+    "pageLoadStrategy": "normal",
+    "options": {
+      "acceptInsecureCerts": true
+    }
+  },
+  "element": {
+    "timeout": 4000,
+    "pollingInterval": 200
+  },
+  "report": {
+    "enabled": true,
+    "reporters": ["console", "allure"],
+    "outputPath": "target/reports",
+    "screenshotOnFailure": true,
+    "options": {
+      "allure": {
+        "environment": "local"
+      }
+    }
+  }
+}

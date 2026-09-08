@@ -1,0 +1,2 @@
+com.report.provider.ConsoleReporterProvider
+com.report.provider.AllureReporterProvider

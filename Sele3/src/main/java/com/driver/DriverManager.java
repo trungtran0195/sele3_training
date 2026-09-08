@@ -1,6 +1,7 @@
 package com.driver;
 
 import com.config.Configuration;
+import com.config.DriverConfig;
 import org.openqa.selenium.Dimension;
 import org.openqa.selenium.WebDriver;
 
@@ -39,7 +40,7 @@ public final class DriverManager {
 
         WebDriver webDriver = DriverFactory.createDriver(configuration);
         DRIVER.set(webDriver);
-        configureSession(webDriver, configuration);
+        configureSession(webDriver, configuration.getDriver());
     }
 
     public static WebDriver getDriver() {
@@ -65,7 +66,7 @@ public final class DriverManager {
         }
     }
 
-    private static void configureSession(WebDriver webDriver, Configuration configuration) {
+    private static void configureSession(WebDriver webDriver, DriverConfig configuration) {
         webDriver.manage().timeouts().pageLoadTimeout(configuration.getPageLoadTimeout());
 
         if (configuration.isStartMaximized() && !configuration.isHeadless()) {

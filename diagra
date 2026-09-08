@@ -4,33 +4,85 @@ classDiagram
     %% ===============================
     class Configuration {
         <<immutable>>
-        -final Browser browser
-        -final String baseUrl
+        -final DriverConfig driver
+        -final ElementConfig element
+        -final ReportConfig report
+        ~static ConfigurationBuilder builder()
+    }
+
+    class DriverConfig {
+        <<immutable>>
+        -final String browser
         -final boolean headless
-        -final String remote
+        -final String baseUrl
+        -final String remoteUrl
         -final boolean startMaximized
         -final String browserSize
-        -final Duration timeout
         -final Duration pageLoadTimeout
-        -final Duration pollingInterval
         -final PageLoadStrategy pageLoadStrategy
-        -final Capabilities capabilities
-        ~static ConfigurationBuilder builder()
+        -final Map~String,Object~ options
         +boolean isRemote()
     }
 
-    class ConfigLoader {
-        +static Configuration fromJsonFile(String jsonFile)
-        +static Configuration fromSystemProperties()
-        -static MutableConfiguration load(String file)
-        -static Configuration createValidatedConfiguration(MutableConfiguration)
+    class ElementConfig {
+        <<immutable>>
+        -final Duration timeout
+        -final Duration pollingInterval
+    }
+
+    class ReportConfig {
+        <<immutable>>
+        -final boolean enabled
+        -final List~String~ reporters
+        -final Path outputPath
+        -final boolean screenshotOnFailure
+        -final Map~String,Map~String,Object~~ options
+    }
+
+    class ConfigurationLoader {
+        +static Configuration load()
+        +static Configuration fromFile(String file)
+        +static Configuration fromEnvironment()
+    }
+
+    class ConfigurationFileReader {
+        -static MutableConfiguration fromJson(String file)
+        -static MutableConfiguration fromProperties(String file)
+    }
+
+    class ConfigurationOverrides {
+        -static Map driverSetters
+        -static Map elementSetters
+        -static Map reportSetters
+        -static void applyProperties(MutableConfiguration, Properties)
+        -static void applyEnvironment(MutableConfiguration)
+        -static void applySystemProperties(MutableConfiguration)
+    }
+
+    class ConfigurationValueParser {
+        -static boolean parseBoolean(String, String)
+        -static Duration parseDuration(String, String)
+        -static PageLoadStrategy parsePageLoadStrategy(String, String)
+        -static Path parsePath(String, String)
+        -static List~String~ parseProviderIds(String, String)
+    }
+
+    class ConfigurationResolver {
+        -static Configuration resolve(MutableConfiguration)
     }
 
     class MutableConfiguration {
         <<DTO>>
     }
 
-    ConfigLoader *-- MutableConfiguration : loads and validates
+    ConfigurationLoader ..> ConfigurationFileReader : reads JSON/properties
+    ConfigurationLoader ..> ConfigurationOverrides : applies env then CLI
+    ConfigurationLoader ..> ConfigurationResolver : validates and creates immutable config
+    ConfigurationFileReader ..> MutableConfiguration : loads
+    ConfigurationOverrides ..> MutableConfiguration : overrides
+    ConfigurationResolver ..> MutableConfiguration : validates and maps
+    ConfigurationOverrides ..> ConfigurationValueParser : parses override values
+    ConfigurationResolver ..> ConfigurationValueParser : parses typed values
 
     %% ===============================
     %% DRIVER MANAGEMENT CORE
@@ -47,22 +99,41 @@ classDiagram
     }
 
     class DriverFactory { +static WebDriver createDriver(Configuration) }
-    class DriverContext {
-        +static WebDriver getDriver()
-        +static Configuration getConfig()
-    }
-    class BrowserManager {
-        -static Map~Browser, Function~Configuration, WebDriver~~ creators
-        +static WebDriver create(Browser, Configuration)
+    class DriverProvider {
+        <<interface>>
+        +String id()
+        +Set~String~ aliases()
+        +WebDriver create(DriverConfig config)
     }
 
-    class Browser {
-        <<enumeration>>
-        CHROME
-        FIREFOX
-        EDGE
-        +static Browser from(String value)
+    class NamedProvider {
+        <<interface>>
+        +String id()
+        +Set~String~ aliases()
     }
+
+    class ProviderRegistry~T~ {
+        -Map~String, T~ providers
+        +T require(String id)
+        +Map~String, T~ providers()
+    }
+
+    class DriverRegistry {
+        -Map~String, DriverProvider~ providers
+        +WebDriver create(DriverConfig config)
+        +Map~String, DriverProvider~ providers()
+    }
+
+    class ChromeDriverProvider
+    class FirefoxDriverProvider
+    class EdgeDriverProvider
+
+    ChromeDriverProvider ..|> DriverProvider
+    FirefoxDriverProvider ..|> DriverProvider
+    EdgeDriverProvider ..|> DriverProvider
+    DriverProvider --|> NamedProvider
+    DriverRegistry --> ProviderRegistry : delegates discovery
+    ProviderRegistry o-- NamedProvider : discovers via ServiceLoader
 
     %% ===============================
     %% ELEMENT / WEBELEMENT
@@ -136,41 +207,35 @@ classDiagram
     %% TEST BASE / TEST RUNNER
     %% ===============================
     class TestBase {
-        +final void setup()
-        +abstract void runTest()
-        +final void tearDown()
+        +void setUp()
+        +void tearDown()
     }
-
-    class LoginTest {
-        +void runTest()
-    }
-
-    TestBase <|-- LoginTest
-    TestBase ..> AssertionManager : uses assertions
     Element --> AssertionManager : validates dynamic state
 
     %% ===============================
     %% REPORTER / LISTENER
     %% ===============================
-    class Listener {
-        <<interface>>
-        +void onTestStart(TestEvent event)
-        +void onTestSuccess(TestEvent event)
-        +void onTestFailure(TestEvent event)
-        +void onTestSkipped(TestEvent event)
-        +void onRunFinish(TestEvent event)
-    }
-
     class Reporter {
         <<interface>>
-        +void startTest(TestEvent event)
-        +void logSuccess(TestEvent event)
-        +void logFailure(TestEvent event)
-        +void logSkipped(TestEvent event)
-        +void logSoftAssertionFailure(TestEvent event, String message)
-        +void attachScreenshot(TestEvent event, byte[] screenshot)
-        +void endTest(TestEvent event)
+        +void onStart(TestEvent event)
+        +void onSuccess(TestEvent event)
+        +void onFailure(TestEvent event)
+        +void onSkipped(TestEvent event)
+        +void attach(String name, String mediaType, byte[] content)
         +void flush()
+    }
+
+    class ReporterProvider {
+        <<interface>>
+        +String id()
+        +Set~String~ aliases()
+        +Reporter create(ReportConfig config)
+    }
+
+    class ReporterRegistry {
+        -Map~String, ReporterProvider~ providers
+        +List~Reporter~ createAll(ReportConfig config)
+        +Map~String, ReporterProvider~ providers()
     }
 
     class TestEvent {
@@ -190,48 +255,61 @@ classDiagram
         SKIPPED
     }
 
-    class DefaultListener {
-        -List~Reporter~ reporters
+    class ReporterListener {
+        -ThreadLocal~List~Reporter~~ currentReporters
+        +void onStart(TestEvent event)
+        +void onSuccess(TestEvent event)
+        +void onFailure(TestEvent event)
+        +void onSkipped(TestEvent event)
+        +void flush()
     }
 
-    class TestNGListenerAdapter
-    class JUnitListenerAdapter
-    class CustomRunnerAdapter
+    class TestNgReporterListener {
+        <<ITestListener>>
+    }
+
+    class JUnitReporterExtension {
+        <<JUnit 5 Extension>>
+    }
+
+    class ConsoleReporterProvider
+    class AllureReporterProvider
     class AllureReporter
-    class ExtentReporter
     class ConsoleReporter
 
-    DefaultListener ..|> Listener
-    DefaultListener o-- Reporter : delegates to configured reporters
-    DefaultListener ..> DriverContext : captures failure screenshot
-    Listener ..> TestEvent : receives
+    ReporterListener o-- Reporter : delegates lifecycle events
+    ReporterListener ..> ReporterRegistry : creates configured reporters
+    ReporterListener ..> DriverManager : captures failure screenshot
+    ReporterListener ..> TestEvent : receives
+    TestNgReporterListener --> ReporterListener : adapts TestNG events
+    JUnitReporterExtension --> ReporterListener : adapts JUnit events
     Reporter ..> TestEvent : reports
     TestEvent --> TestStatus : has status
 
-    TestNGListenerAdapter --> Listener : converts TestNG events
-    JUnitListenerAdapter --> Listener : converts JUnit events
-    CustomRunnerAdapter --> Listener : converts runner events
-
     AllureReporter ..|> Reporter
-    ExtentReporter ..|> Reporter
     ConsoleReporter ..|> Reporter
+    AllureReporterProvider ..|> ReporterProvider
+    ConsoleReporterProvider ..|> ReporterProvider
+    ReporterProvider --|> NamedProvider
+    ReporterRegistry --> ProviderRegistry : delegates discovery
+    ReporterProvider ..> Reporter : creates
 
     %% ===============================
     %% RELATIONSHIPS
     %% ===============================
-    ConfigLoader ..> Configuration : creates
-    Configuration --> Browser : selects browser
-    TestBase ..> ConfigLoader : loads per-test config
+    ConfigurationLoader ..> Configuration : creates
+    Configuration *-- DriverConfig
+    Configuration *-- ElementConfig
+    Configuration *-- ReportConfig
+    TestBase ..> ConfigurationLoader : loads per-test config
     TestBase ..> DriverManager : initializes and cleans up
 
     DriverManager *-- Configuration : owns per-thread config
     DriverManager *-- WebDriver : owns per-thread driver
     DriverManager ..> DriverFactory : delegates creation
-    DriverFactory ..> BrowserManager : delegates creation
-    BrowserManager ..> Browser : selects creator from map
-    DriverContext ..> DriverManager : delegates access
-    DriverContext --> WebDriver : returns current thread driver
-    DriverContext --> Configuration : returns current thread config
-
-    Element ..> DriverContext : gets current driver/config
+    DriverFactory ..> DriverRegistry : resolves configured provider
+    DriverProvider ..> DriverConfig : creates from
+    Element ..> DriverManager : gets current driver/config
+    Element ..> ElementConfig : uses timeout and polling
     Element --> WebDriver : interacts with browser session
+    ReporterProvider ..> ReportConfig : creates from
