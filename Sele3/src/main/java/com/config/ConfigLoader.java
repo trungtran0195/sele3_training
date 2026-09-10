@@ -13,6 +13,7 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.HashMap;
@@ -44,14 +45,16 @@ public final class ConfigLoader {
             throw new ConfigurationException("Configuration file must not be blank");
         }
 
-        Path path = Path.of(file);
-        try (BufferedReader reader = Files.newBufferedReader(path, StandardCharsets.UTF_8)) {
-            MutableConfiguration config = GSON.fromJson(reader, MutableConfiguration.class);
-            if (config == null) {
-                throw new ConfigurationException("Configuration file is empty: " + path);
+        try {
+            Path path = Path.of(file);
+            try (BufferedReader reader = Files.newBufferedReader(path, StandardCharsets.UTF_8)) {
+                MutableConfiguration config = GSON.fromJson(reader, MutableConfiguration.class);
+                if (config == null) {
+                    throw new ConfigurationException("Configuration file is empty: " + path);
+                }
+                return config;
             }
-            return config;
-        } catch (IOException | JsonParseException e) {
+        } catch (IOException | JsonParseException | InvalidPathException e) {
             throw new ConfigurationException("Cannot load config: " + file, e);
         }
     }

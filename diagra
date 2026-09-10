@@ -47,10 +47,6 @@ classDiagram
     }
 
     class DriverFactory { +static WebDriver createDriver(Configuration) }
-    class DriverContext {
-        +static WebDriver getDriver()
-        +static Configuration getConfig()
-    }
     class BrowserManager {
         -static Map~Browser, Function~Configuration, WebDriver~~ creators
         +static WebDriver create(Browser, Configuration)
@@ -203,7 +199,7 @@ classDiagram
 
     DefaultListener ..|> Listener
     DefaultListener o-- Reporter : delegates to configured reporters
-    DefaultListener ..> DriverContext : captures failure screenshot
+    DefaultListener ..> DriverManager : captures failure screenshot
     Listener ..> TestEvent : receives
     Reporter ..> TestEvent : reports
     TestEvent --> TestStatus : has status
@@ -229,9 +225,5 @@ classDiagram
     DriverManager ..> DriverFactory : delegates creation
     DriverFactory ..> BrowserManager : delegates creation
     BrowserManager ..> Browser : selects creator from map
-    DriverContext ..> DriverManager : delegates access
-    DriverContext --> WebDriver : returns current thread driver
-    DriverContext --> Configuration : returns current thread config
-
-    Element ..> DriverContext : gets current driver/config
+    Element ..> DriverManager : gets current driver/config
     Element --> WebDriver : interacts with browser session
