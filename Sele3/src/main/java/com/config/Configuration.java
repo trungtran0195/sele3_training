@@ -13,7 +13,7 @@ import java.time.Duration;
 @Builder(access = AccessLevel.PACKAGE)
 public class Configuration {
 
-    Browser browser;
+    String browser;
     boolean headless;
     String baseUrl;
 

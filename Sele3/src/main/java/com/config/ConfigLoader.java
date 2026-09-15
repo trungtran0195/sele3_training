@@ -27,12 +27,24 @@ public final class ConfigLoader {
             .registerTypeAdapter(Duration.class, new DurationTypeAdapter())
             .create();
 
+    /**
+     * Loads a JSON configuration, applies JVM system-property overrides and validates the result.
+     * The caller decides where the file path comes from (code, environment or command line).
+     *
+     * @param jsonFile configuration file path
+     * @return immutable validated configuration
+     */
     public static Configuration fromJsonFile(String jsonFile) {
         MutableConfiguration config = load(jsonFile);
         applySystemPropertyOverrides(config);
         return createValidatedConfiguration(config);
     }
 
+    /**
+     * Creates the default configuration with JVM system-property overrides.
+     *
+     * @return immutable validated configuration
+     */
     public static Configuration fromSystemProperties() {
         MutableConfiguration config = new MutableConfiguration();
         applySystemPropertyOverrides(config);
@@ -57,7 +69,7 @@ public final class ConfigLoader {
     }
 
     private static void applySystemPropertyOverrides(MutableConfiguration config) {
-        config.browser = browserProperty(ConfigKey.BROWSER, config.browser);
+        config.browser = textProperty(ConfigKey.BROWSER, config.browser);
         config.headless = booleanProperty(ConfigKey.HEADLESS, config.headless);
         config.remote = textProperty(ConfigKey.REMOTE, config.remote);
         config.baseUrl = textProperty(ConfigKey.BASE_URL, config.baseUrl);
@@ -70,9 +82,7 @@ public final class ConfigLoader {
     }
 
     private static Configuration createValidatedConfiguration(MutableConfiguration config) {
-        if (config.browser == null) {
-            throw new ConfigurationException(ConfigKey.BROWSER + " must not be null");
-        }
+        requireNonBlank(ConfigKey.BROWSER, config.browser);
         requireHttpUrl(ConfigKey.BASE_URL, config.baseUrl);
         if (config.remote != null && !config.remote.isBlank()) {
             requireHttpUrl(ConfigKey.REMOTE, config.remote);
@@ -121,18 +131,6 @@ public final class ConfigLoader {
             throw invalidProperty(key, value, null);
         }
         return Boolean.parseBoolean(value);
-    }
-
-    private static Browser browserProperty(String key, Browser fallback) {
-        String value = System.getProperty(key);
-        if (value == null) {
-            return fallback;
-        }
-        try {
-            return Browser.from(value);
-        } catch (ConfigurationException e) {
-            throw invalidProperty(key, value, e);
-        }
     }
 
     private static Duration durationProperty(String key, Duration fallback) {
@@ -186,7 +184,7 @@ public final class ConfigLoader {
     }
 
     private static final class MutableConfiguration {
-        private Browser browser = Browser.CHROME;
+        private String browser = "chrome";
         private boolean headless;
         private String baseUrl = "http://localhost:8080";
         private String remote = "";
