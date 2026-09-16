@@ -38,8 +38,17 @@ public final class DriverManager {
         }
 
         WebDriver webDriver = DriverFactory.createDriver(configuration);
-        DRIVER.set(webDriver);
-        configureSession(webDriver, configuration);
+        try {
+            configureSession(webDriver, configuration);
+            DRIVER.set(webDriver);
+        } catch (RuntimeException | Error e) {
+            try {
+                webDriver.quit();
+            } catch (RuntimeException quitError) {
+                e.addSuppressed(quitError);
+            }
+            throw e;
+        }
     }
 
     public static WebDriver getDriver() {

@@ -4,7 +4,7 @@ classDiagram
     %% ===============================
     class Configuration {
         <<immutable>>
-        -final Browser browser
+        -final String browser
         -final String baseUrl
         -final boolean headless
         -final String remote
@@ -51,18 +51,24 @@ classDiagram
         +static WebDriver getDriver()
         +static Configuration getConfig()
     }
-    class BrowserManager {
-        -static Map~Browser, Function~Configuration, WebDriver~~ creators
-        +static WebDriver create(Browser, Configuration)
+    class DriverRegistry {
+        -static Map~String, DriverProvider~ providers
+        +static WebDriver create(Configuration)
     }
 
-    class Browser {
-        <<enumeration>>
-        CHROME
-        FIREFOX
-        EDGE
-        +static Browser from(String value)
+    class DriverProvider {
+        <<interface>>
+        +String name()
+        +WebDriver create(Configuration)
     }
+
+    class ChromeDriverProvider
+    class FirefoxDriverProvider
+    class EdgeDriverProvider
+
+    ChromeDriverProvider ..|> DriverProvider
+    FirefoxDriverProvider ..|> DriverProvider
+    EdgeDriverProvider ..|> DriverProvider
 
     %% ===============================
     %% ELEMENT / WEBELEMENT
@@ -220,15 +226,14 @@ classDiagram
     %% RELATIONSHIPS
     %% ===============================
     ConfigLoader ..> Configuration : creates
-    Configuration --> Browser : selects browser
     TestBase ..> ConfigLoader : loads per-test config
     TestBase ..> DriverManager : initializes and cleans up
 
     DriverManager *-- Configuration : owns per-thread config
     DriverManager *-- WebDriver : owns per-thread driver
     DriverManager ..> DriverFactory : delegates creation
-    DriverFactory ..> BrowserManager : delegates creation
-    BrowserManager ..> Browser : selects creator from map
+    DriverFactory ..> DriverRegistry : delegates creation
+    DriverRegistry o-- DriverProvider : discovers via ServiceLoader
     DriverContext ..> DriverManager : delegates access
     DriverContext --> WebDriver : returns current thread driver
     DriverContext --> Configuration : returns current thread config
