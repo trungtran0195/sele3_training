@@ -10,7 +10,7 @@ import org.testng.annotations.Optional;
 import org.testng.annotations.Parameters;
 
 /** TestNG base class responsible only for configuration and driver lifecycle. */
-public abstract class TestBase {
+public class TestBase {
 
     public static final String CONFIG_FILE_PARAMETER = "config.file";
     public static final String CONFIG_FILE_ENVIRONMENT = "CONFIG_FILE";

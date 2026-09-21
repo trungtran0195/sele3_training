@@ -1,16 +1,14 @@
 package com.report;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 /** Thread-safe collection of reporters registered by framework setup code. */
+@Slf4j
 public final class ReporterRegistry {
-
-    private static final Logger LOGGER = LoggerFactory.getLogger(ReporterRegistry.class);
 
     private final CopyOnWriteArrayList<Reporter> reporters = new CopyOnWriteArrayList<>();
 
@@ -32,7 +30,7 @@ public final class ReporterRegistry {
             try {
                 reporter.report(event);
             } catch (Exception e) {
-                LOGGER.warn(
+                log.warn(
                         "Reporter {} failed while handling {} for test {}",
                         reporter.getClass().getName(),
                         event.status(),

@@ -11,8 +11,8 @@ import org.testng.ISuiteListener;
 import org.testng.ITestListener;
 import org.testng.ITestResult;
 
-import java.util.Locale;
 import java.util.LinkedHashSet;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Supplier;
@@ -29,8 +29,14 @@ public class TestNgReporterListener implements ISuiteListener, ITestListener {
     @Override
     public void onStart(ISuite suite) {
         ReporterRegistry registry = new ReporterRegistry();
-        registerConfiguredReporters(registry, suite.getParameter(REPORTERS_PARAMETER));
+        registerConfiguredReporters(
+                registry,
+                resolveConfiguredReporters(suite.getParameter(REPORTERS_PARAMETER)));
         suite.setAttribute(REGISTRY_ATTRIBUTE, registry);
+    }
+
+    static String resolveConfiguredReporters(String suiteReporters) {
+        return System.getProperty(REPORTERS_PARAMETER, suiteReporters);
     }
 
     @Override
