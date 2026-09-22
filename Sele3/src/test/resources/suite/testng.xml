@@ -1,0 +1,18 @@
+<!DOCTYPE suite SYSTEM "https://testng.org/testng-1.0.dtd">
+<suite name="Framework Test Suite">
+    <parameter name="reporters" value="console"/>
+
+    <listeners>
+        <listener class-name="com.listener.TestNgReporterListener"/>
+    </listeners>
+
+    <test name="Framework Unit Tests">
+        <packages>
+            <package name="com.config"/>
+            <package name="com.driver"/>
+            <package name="com.listener"/>
+            <package name="com.report"/>
+            <package name="com.test"/>
+        </packages>
+    </test>
+</suite>
