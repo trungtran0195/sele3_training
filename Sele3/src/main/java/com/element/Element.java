@@ -2,12 +2,17 @@ package com.element;
 
 import com.config.Configuration;
 import com.driver.DriverContext;
+import lombok.AccessLevel;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import org.openqa.selenium.By;
+import org.openqa.selenium.ElementClickInterceptedException;
+import org.openqa.selenium.ElementNotInteractableException;
 import org.openqa.selenium.TimeoutException;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
-import org.openqa.selenium.support.ui.ExpectedCondition;
 
+import java.time.Duration;
 import java.util.Objects;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -16,47 +21,26 @@ import java.util.function.Supplier;
 /**
  * Locator-based element that resolves a fresh WebElement for every operation.
  */
+@RequiredArgsConstructor(access = AccessLevel.PRIVATE)
 public final class Element {
 
+    @NonNull
     private final Function<WebDriver, WebElement> resolver;
+    @NonNull
     private final Supplier<WebDriver> driverSupplier;
+    @NonNull
     private final Supplier<Configuration> configurationSupplier;
+    @NonNull
     private final String description;
-    private final String timeoutMessage;
-
-    private Element(
-            Function<WebDriver, WebElement> resolver,
-            Supplier<WebDriver> driverSupplier,
-            Supplier<Configuration> configurationSupplier,
-            String description,
-            String timeoutMessage) {
-        this.resolver = Objects.requireNonNull(resolver, "Element resolver must not be null");
-        this.driverSupplier = Objects.requireNonNull(driverSupplier, "Driver supplier must not be null");
-        this.configurationSupplier = Objects.requireNonNull(
-                configurationSupplier,
-                "Configuration supplier must not be null");
-        this.description = Objects.requireNonNull(description, "Element description must not be null");
-        this.timeoutMessage = timeoutMessage;
-    }
+    private final String timeoutMessageOverride;
+    private final Duration timeoutOverride;
 
     public static Element of(By locator) {
         return create(locator, DriverContext::getDriver, DriverContext::getConfig);
     }
 
-    public static Element of(LocatorType type, String value) {
-        return of(Objects.requireNonNull(type, "Locator type must not be null").toBy(value));
-    }
-
-    public static Element find(By locator) {
-        Element element = of(locator);
-        element.resolveVisible();
-        return element;
-    }
-
-    public static Element find(LocatorType type, String value) {
-        Element element = of(type, value);
-        element.resolveVisible();
-        return element;
+    public static Element of(LocatorType locatorType, String locatorValue) {
+        return of(toBy(locatorType, locatorValue));
     }
 
     static Element create(
@@ -69,70 +53,106 @@ public final class Element {
                 driverSupplier,
                 configurationSupplier,
                 locator.toString(),
+                null,
                 null);
     }
 
-    public Element findElement(By childLocator) {
+    public Element child(By childLocator) {
         Objects.requireNonNull(childLocator, "Child locator must not be null");
-        Element child = new Element(
+        return new Element(
                 driver -> resolver.apply(driver).findElement(childLocator),
                 driverSupplier,
                 configurationSupplier,
                 description + " -> " + childLocator,
+                null,
                 null);
-        child.resolveVisible();
-        return child;
     }
 
-    public Element findElement(LocatorType type, String value) {
-        return findElement(Objects.requireNonNull(type, "Locator type must not be null").toBy(value));
+    public Element child(LocatorType locatorType, String locatorValue) {
+        return child(toBy(locatorType, locatorValue));
     }
 
-    public Element named(String name) {
-        if (name == null || name.isBlank()) {
+    private static By toBy(LocatorType locatorType, String locatorValue) {
+        return (locatorType == null ? LocatorType.XPATH : locatorType).toBy(locatorValue);
+    }
+
+    public Element named(String elementName) {
+        if (elementName == null || elementName.isBlank()) {
             throw new IllegalArgumentException("Element name must not be blank");
         }
-        return new Element(resolver, driverSupplier, configurationSupplier, name, timeoutMessage);
+        return new Element(
+                resolver,
+                driverSupplier,
+                configurationSupplier,
+                elementName,
+                timeoutMessageOverride,
+                timeoutOverride);
     }
 
-    public Element withTimeoutMessage(String message) {
-        if (message == null || message.isBlank()) {
+    public Element withTimeoutMessage(String timeoutMessage) {
+        if (timeoutMessage == null || timeoutMessage.isBlank()) {
             throw new IllegalArgumentException("Timeout message must not be blank");
         }
-        return new Element(resolver, driverSupplier, configurationSupplier, description, message);
+        return new Element(
+                resolver,
+                driverSupplier,
+                configurationSupplier,
+                description,
+                timeoutMessage,
+                timeoutOverride);
+    }
+
+    public Element withTimeout(Duration timeout) {
+        Objects.requireNonNull(timeout, "Timeout must not be null");
+        if (timeout.isZero() || timeout.isNegative()) {
+            throw new IllegalArgumentException("Timeout must be greater than zero");
+        }
+        return new Element(
+                resolver,
+                driverSupplier,
+                configurationSupplier,
+                description,
+                timeoutMessageOverride,
+                timeout);
     }
 
     public void click() {
-        waitForCurrentThread().until(condition("click " + description, currentDriver -> {
+        waitUntil("click " + description, currentDriver -> {
             WebElement element = findVisible(currentDriver);
             if (element == null || !element.isEnabled()) {
                 return null;
             }
             element.click();
             return Boolean.TRUE;
-        }));
+        }, ElementClickInterceptedException.class, ElementNotInteractableException.class);
     }
 
-    public void sendKeys(CharSequence... values) {
-        Objects.requireNonNull(values, "Values must not be null");
-        performWhenVisible("send keys to " + description, element -> element.sendKeys(values));
+    public void sendKeys(CharSequence... keys) {
+        Objects.requireNonNull(keys, "Keys must not be null");
+        performWhenVisible(
+                "send keys to " + description,
+                element -> element.sendKeys(keys),
+                ElementNotInteractableException.class);
     }
 
     public void clear() {
-        performWhenVisible("clear " + description, WebElement::clear);
+        performWhenVisible(
+                "clear " + description,
+                WebElement::clear,
+                ElementNotInteractableException.class);
     }
 
     public String getText() {
         return readWhenVisible("read text from " + description, WebElement::getText);
     }
 
-    public String getAttribute(String name) {
-        if (name == null || name.isBlank()) {
+    public String getAttribute(String attributeName) {
+        if (attributeName == null || attributeName.isBlank()) {
             throw new IllegalArgumentException("Attribute name must not be blank");
         }
         return readWhenVisible(
-                "read attribute '" + name + "' from " + description,
-                element -> element.getAttribute(name));
+                "read attribute '" + attributeName + "' from " + description,
+                element -> element.getAttribute(attributeName));
     }
 
     public boolean isDisplayed() {
@@ -153,7 +173,7 @@ public final class Element {
     }
 
     private WebElement resolveVisible() {
-        return waitForCurrentThread().until(condition("find visible " + description, this::findVisible));
+        return waitUntil("find visible " + description, this::findVisible);
     }
 
     private WebElement findVisible(WebDriver driver) {
@@ -161,42 +181,33 @@ public final class Element {
         return element.isDisplayed() ? element : null;
     }
 
-    private void performWhenVisible(String operation, Consumer<WebElement> action) {
-        waitForCurrentThread().until(visibleAction(operation, action));
-    }
-
-    private ExpectedCondition<Boolean> visibleAction(String operation, Consumer<WebElement> action) {
-        return condition(operation, currentDriver -> {
+    @SafeVarargs
+    private final void performWhenVisible(
+            String operationDescription,
+            Consumer<WebElement> action,
+            Class<? extends Throwable>... ignoredExceptions) {
+        waitUntil(operationDescription, currentDriver -> {
             WebElement element = findVisible(currentDriver);
             if (element == null) {
                 return null;
             }
             action.accept(element);
             return Boolean.TRUE;
-        });
+        }, ignoredExceptions);
     }
 
-    private <T> T readWhenVisible(String operation, Function<WebElement, T> reader) {
-        return waitForCurrentThread().until(visibleRead(operation, reader)).value();
-    }
-
-    private <T> ExpectedCondition<Evaluation<T>> visibleRead(
-            String operation,
-            Function<WebElement, T> reader) {
-        return condition(operation, currentDriver -> {
+    private <T> T readWhenVisible(String operationDescription, Function<WebElement, T> reader) {
+        return waitUntil(operationDescription, currentDriver -> {
             WebElement element = findVisible(currentDriver);
-            return element == null ? null : new Evaluation<>(reader.apply(element));
-        });
+            return element == null ? null : new WaitResult<>(reader.apply(element));
+        }).value();
     }
 
-    private <T> ExpectedCondition<T> condition(
-            String defaultMessage,
-            Function<WebDriver, T> delegate) {
-        String message = timeoutMessage == null ? defaultMessage : timeoutMessage;
-        return new ElementCondition<>(message, delegate);
-    }
-
-    private ElementWait waitForCurrentThread() {
+    @SafeVarargs
+    private final <T> T waitUntil(
+            String defaultTimeoutMessage,
+            Function<WebDriver, T> condition,
+            Class<? extends Throwable>... ignoredExceptions) {
         WebDriver driver = driverSupplier.get();
         if (driver == null) {
             throw new IllegalStateException("WebDriver has not been initialized for this thread");
@@ -207,10 +218,13 @@ public final class Element {
             throw new IllegalStateException("Configuration has not been initialized for this thread");
         }
 
-        return new ElementWait(
-                driver,
-                configuration.getTimeout(),
-                configuration.getPollingInterval());
+        return ElementWait.forCondition(condition)
+                .usingDriver(driver)
+                .withTimeout(timeoutOverride == null ? configuration.getTimeout() : timeoutOverride)
+                .pollingEvery(configuration.getPollingInterval())
+                .withMessage(timeoutMessageOverride == null ? defaultTimeoutMessage : timeoutMessageOverride)
+                .ignoring(ignoredExceptions)
+                .await();
     }
 
     @Override
@@ -218,6 +232,6 @@ public final class Element {
         return "Element{" + description + '}';
     }
 
-    private record Evaluation<T>(T value) {
+    private record WaitResult<T>(T value) {
     }
 }

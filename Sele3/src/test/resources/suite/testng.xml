@@ -10,6 +10,7 @@
         <packages>
             <package name="com.config"/>
             <package name="com.driver"/>
+            <package name="com.element"/>
             <package name="com.listener"/>
             <package name="com.report"/>
             <package name="com.test"/>

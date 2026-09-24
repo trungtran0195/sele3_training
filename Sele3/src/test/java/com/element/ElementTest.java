@@ -3,6 +3,7 @@ package com.element;
 import com.config.ConfigLoader;
 import com.config.Configuration;
 import org.openqa.selenium.By;
+import org.openqa.selenium.ElementClickInterceptedException;
 import org.openqa.selenium.StaleElementReferenceException;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
@@ -21,6 +22,13 @@ public class ElementTest {
             "src", "test", "resources", "config", "defaults.json").toString());
     private static final Configuration SHORT_TIMEOUT_CONFIGURATION = ConfigLoader.fromJsonFile(Path.of(
             "src", "test", "resources", "config", "short-timeout.json").toString());
+
+    @Test
+    public void shouldUseXpathWhenLocatorTypeIsNull() {
+        Element element = Element.of(null, "//button");
+
+        Assert.assertEquals(element.toString(), "Element{By.xpath: //button}");
+    }
 
     @Test
     public void shouldResolveAVisibleElementForEachRead() {
@@ -115,9 +123,57 @@ public class ElementTest {
         });
         Element form = Element.create(By.id("form"), () -> driver, () -> CONFIGURATION);
 
-        Element message = form.findElement(LocatorType.CLASS_NAME, "message");
+        Element message = form.child(LocatorType.CLASS_NAME, "message");
         Assert.assertEquals(message.getText(), "Nested");
-        Assert.assertEquals(parentFinds.get(), 2);
+        Assert.assertEquals(parentFinds.get(), 1);
+    }
+
+    @Test
+    public void shouldCreateChildElementWithoutAccessingDriver() {
+        Element parent = Element.create(
+                By.id("form"),
+                () -> {
+                    throw new AssertionError("Driver must not be accessed while defining an element");
+                },
+                () -> {
+                    throw new AssertionError("Configuration must not be accessed while defining an element");
+                });
+
+        Element child = parent.child(By.id("message"));
+
+        Assert.assertEquals(
+                child.toString(),
+                "Element{By.id: form -> By.id: message}");
+    }
+
+    @Test
+    public void shouldKeepInteractionRetryPolicyScopedToClick() {
+        AtomicInteger clicks = new AtomicInteger();
+        AtomicInteger textReads = new AtomicInteger();
+        WebElement webElement = webElement((proxy, method, args) -> switch (method.getName()) {
+            case "isDisplayed", "isEnabled" -> true;
+            case "click" -> {
+                if (clicks.incrementAndGet() == 1) {
+                    throw new ElementClickInterceptedException("Overlay is still visible");
+                }
+                yield null;
+            }
+            case "getText" -> {
+                textReads.incrementAndGet();
+                throw new ElementClickInterceptedException("Unexpected read failure");
+            }
+            default -> defaultValue(method);
+        });
+        Element element = Element.create(
+                By.id("submit"),
+                () -> driverReturning(webElement),
+                () -> SHORT_TIMEOUT_CONFIGURATION);
+
+        element.click();
+        Assert.expectThrows(ElementClickInterceptedException.class, element::getText);
+
+        Assert.assertEquals(clicks.get(), 2);
+        Assert.assertEquals(textReads.get(), 1);
     }
 
     @Test

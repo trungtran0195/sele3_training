@@ -22,10 +22,10 @@ public enum LocatorType {
         this.locatorFactory = locatorFactory;
     }
 
-    public By toBy(String value) {
-        if (value == null || value.isBlank()) {
+    public By toBy(String locatorValue) {
+        if (locatorValue == null || locatorValue.isBlank()) {
             throw new IllegalArgumentException("Locator value must not be blank");
         }
-        return locatorFactory.apply(value);
+        return locatorFactory.apply(locatorValue);
     }
 }
