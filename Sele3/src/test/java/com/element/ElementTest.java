@@ -4,6 +4,8 @@ import com.config.ConfigLoader;
 import com.config.Configuration;
 import org.openqa.selenium.By;
 import org.openqa.selenium.ElementClickInterceptedException;
+import org.openqa.selenium.InvalidElementStateException;
+import org.openqa.selenium.NoSuchElementException;
 import org.openqa.selenium.StaleElementReferenceException;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
@@ -14,21 +16,13 @@ import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class ElementTest {
 
     private static final Configuration CONFIGURATION = ConfigLoader.fromJsonFile(Path.of(
             "src", "test", "resources", "config", "defaults.json").toString());
-    private static final Configuration SHORT_TIMEOUT_CONFIGURATION = ConfigLoader.fromJsonFile(Path.of(
-            "src", "test", "resources", "config", "short-timeout.json").toString());
-
-    @Test
-    public void shouldUseXpathWhenLocatorTypeIsNull() {
-        Element element = Element.of(null, "//button");
-
-        Assert.assertEquals(element.toString(), "Element{By.xpath: //button}");
-    }
 
     @Test
     public void shouldResolveAVisibleElementForEachRead() {
@@ -79,6 +73,29 @@ public class ElementTest {
     }
 
     @Test
+    public void shouldRetryWhenElementDoesNotExistYet() {
+        AtomicInteger finds = new AtomicInteger();
+        WebElement webElement = webElement((proxy, method, args) -> switch (method.getName()) {
+            case "isDisplayed" -> true;
+            case "getText" -> "Ready";
+            default -> defaultValue(method);
+        });
+        WebDriver driver = webDriver((proxy, method, args) -> {
+            if (method.getName().equals("findElement")) {
+                if (finds.incrementAndGet() == 1) {
+                    throw new NoSuchElementException("Not rendered yet");
+                }
+                return webElement;
+            }
+            return defaultValue(method);
+        });
+        Element element = Element.create(By.id("status"), () -> driver, () -> CONFIGURATION);
+
+        Assert.assertEquals(element.getText(), "Ready");
+        Assert.assertEquals(finds.get(), 2);
+    }
+
+    @Test
     public void shouldWaitUntilElementIsClickable() {
         AtomicInteger enabledChecks = new AtomicInteger();
         AtomicInteger clicks = new AtomicInteger();
@@ -123,7 +140,7 @@ public class ElementTest {
         });
         Element form = Element.create(By.id("form"), () -> driver, () -> CONFIGURATION);
 
-        Element message = form.child(LocatorType.CLASS_NAME, "message");
+        Element message = form.child(By.className("message"));
         Assert.assertEquals(message.getText(), "Nested");
         Assert.assertEquals(parentFinds.get(), 1);
     }
@@ -167,7 +184,7 @@ public class ElementTest {
         Element element = Element.create(
                 By.id("submit"),
                 () -> driverReturning(webElement),
-                () -> SHORT_TIMEOUT_CONFIGURATION);
+                () -> CONFIGURATION);
 
         element.click();
         Assert.expectThrows(ElementClickInterceptedException.class, element::getText);
@@ -189,38 +206,86 @@ public class ElementTest {
     }
 
     @Test
+    public void shouldReadStateWithoutWaitingForVisibility() {
+        WebElement hiddenElement = webElement((proxy, method, args) -> switch (method.getName()) {
+            case "isDisplayed" -> false;
+            case "getAttribute" -> "hidden-value";
+            case "isEnabled", "isSelected" -> true;
+            default -> defaultValue(method);
+        });
+        Element element = Element.create(
+                By.id("hidden-control"),
+                () -> driverReturning(hiddenElement),
+                () -> CONFIGURATION);
+
+        Assert.assertEquals(element.getAttribute("value"), "hidden-value");
+        Assert.assertTrue(element.isEnabled());
+        Assert.assertTrue(element.isSelected());
+    }
+
+    @Test
+    public void shouldRetryClearForInvalidElementState() {
+        AtomicInteger clears = new AtomicInteger();
+        WebElement webElement = webElement((proxy, method, args) -> {
+            if (method.getName().equals("isDisplayed")) {
+                return true;
+            }
+            if (method.getName().equals("clear") && clears.incrementAndGet() == 1) {
+                throw new InvalidElementStateException("Input is not editable yet");
+            }
+            return defaultValue(method);
+        });
+        Element element = Element.create(
+                By.id("input"),
+                () -> driverReturning(webElement),
+                () -> CONFIGURATION);
+
+        element.clear();
+
+        Assert.assertEquals(clears.get(), 2);
+    }
+
+    @Test
     public void shouldUseCustomTimeoutMessage() {
         WebElement hiddenElement = webElement((proxy, method, args) ->
                 method.getName().equals("isDisplayed") ? false : defaultValue(method));
         Element element = Element.create(
-                        By.id("submit"),
-                        () -> driverReturning(hiddenElement),
-                        () -> SHORT_TIMEOUT_CONFIGURATION)
-                .withTimeoutMessage("Submit button did not become available");
+                By.id("submit"),
+                () -> driverReturning(hiddenElement),
+                () -> CONFIGURATION);
+        ElementWait<Boolean> wait = element
+                .waitFor("submit button visible", WebElement::isDisplayed)
+                .withTimeout(Duration.ofMillis(20))
+                .pollingEvery(Duration.ofMillis(5))
+                .withMessage("Submit button did not become available");
 
         ElementTimeoutException error = Assert.expectThrows(
                 ElementTimeoutException.class,
-                element::click);
+                wait::await);
 
         Assert.assertEquals(error.getMessage(), "Submit button did not become available");
         Assert.assertNotNull(error.getCause());
     }
 
     @Test
-    public void shouldIncludeOperationAndElementNameInDefaultTimeoutMessage() {
+    public void shouldUseConditionDescriptionAsDefaultTimeoutMessage() {
         WebElement hiddenElement = webElement((proxy, method, args) ->
                 method.getName().equals("isDisplayed") ? false : defaultValue(method));
         Element element = Element.create(
                         By.id("submit"),
                         () -> driverReturning(hiddenElement),
-                        () -> SHORT_TIMEOUT_CONFIGURATION)
+                        () -> CONFIGURATION)
                 .named("Submit button");
+        ElementWait<Boolean> wait = element
+                .waitFor("find visible Submit button", WebElement::isDisplayed)
+                .withTimeout(Duration.ofMillis(20))
+                .pollingEvery(Duration.ofMillis(5));
 
         ElementTimeoutException error = Assert.expectThrows(
                 ElementTimeoutException.class,
-                element::click);
+                wait::await);
 
-        Assert.assertEquals(error.getMessage(), "click Submit button");
+        Assert.assertEquals(error.getMessage(), "find visible Submit button");
     }
 
     private static WebDriver driverReturning(WebElement element) {
