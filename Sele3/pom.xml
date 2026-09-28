@@ -22,6 +22,7 @@
         <aspectj.version>1.9.20</aspectj.version>
         <compiler.version>3.13.0</compiler.version>
         <surefire.version>3.2.5</surefire.version>
+        <testng.suite>src/test/resources/suite/unit-testng.xml</testng.suite>
     </properties>
 
     <dependencies>
@@ -105,7 +106,7 @@
                 <version>${surefire.version}</version>
                 <configuration>
                     <suiteXmlFiles>
-                        <suiteXmlFile>src/test/resources/suite/testng.xml</suiteXmlFile>
+                        <suiteXmlFile>${testng.suite}</suiteXmlFile>
                     </suiteXmlFiles>
                     <argLine>
                         -javaagent:"${settings.localRepository}/org/aspectj/aspectjweaver/${aspectj.version}/aspectjweaver-${aspectj.version}.jar"
@@ -132,4 +133,12 @@
             </plugin>
         </plugins>
     </build>
+    <profiles>
+        <profile>
+            <id>automation-tests</id>
+            <properties>
+                <testng.suite>src/test/resources/suite/automation-testng.xml</testng.suite>
+            </properties>
+        </profile>
+    </profiles>
 </project>

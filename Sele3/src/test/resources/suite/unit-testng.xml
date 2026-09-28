@@ -1,5 +1,5 @@
 <!DOCTYPE suite SYSTEM "https://testng.org/testng-1.0.dtd">
-<suite name="Framework Test Suite">
+<suite name="Framework Unit Test Suite">
     <parameter name="reporters" value="console"/>
 
     <listeners>
