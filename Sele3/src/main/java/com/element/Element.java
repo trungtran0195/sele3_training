@@ -5,13 +5,15 @@ import lombok.AccessLevel;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import org.openqa.selenium.By;
-import org.openqa.selenium.ElementClickInterceptedException;
 import org.openqa.selenium.ElementNotInteractableException;
 import org.openqa.selenium.InvalidElementStateException;
+import org.openqa.selenium.JavascriptExecutor;
 import org.openqa.selenium.TimeoutException;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
+import org.openqa.selenium.support.ui.ExpectedConditions;
 
+import java.util.List;
 import java.util.Objects;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -19,7 +21,7 @@ import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 /**
- * A lazy, locator-based element that resolves a fresh {@link WebElement} for every operation.
+ * A lazy, locator-based element that finds a fresh {@link WebElement} for every operation.
  * Element instances can be declared before a browser is initialized. Driver access and waiting
  * begin only when an action, read, or condition is executed.
  */
@@ -27,11 +29,9 @@ import java.util.function.Supplier;
 public final class Element {
 
     @NonNull
-    private final Function<WebDriver, WebElement> resolver;
+    private final Function<WebDriver, WebElement> elementFinder;
     @NonNull
     private final ElementContext context;
-    @NonNull
-    private final String description;
 
     /**
      * Creates a lazy element from a Selenium locator.
@@ -52,48 +52,40 @@ public final class Element {
 
     private static Element create(By locator, ElementContext context) {
         Objects.requireNonNull(locator, "Locator must not be null");
-        // Store the lookup operation, not its WebElement result. Calling resolver.apply(driver)
-        // later executes driver.findElement(locator) again and obtains the current DOM element.
-        return new Element(driver -> driver.findElement(locator), context, locator.toString());
+        // Store how to find the element, not a WebElement that may later become stale.
+        return new Element(driver -> driver.findElement(locator), context);
     }
 
     /**
-     * Creates a lazy child element. The parent and child are resolved again for every operation,
-     * so no parent {@link WebElement} is cached.
+     * Creates a lazy child element. When an operation is executed, Selenium's
+     * {@link ExpectedConditions#visibilityOfNestedElementsLocatedBy(WebElement, By)} finds the
+     * visible children inside a freshly found parent. The first matching child is used.
      *
      * @param childLocator locator relative to this element
      * @return lazy child element
      */
     public Element child(By childLocator) {
         Objects.requireNonNull(childLocator, "Child locator must not be null");
-        // Re-running this resolver first resolves a fresh parent, then finds a fresh child from it.
         return new Element(
-                driver -> resolver.apply(driver).findElement(childLocator),
-                context,
-                description + " -> " + childLocator);
-    }
-
-    /**
-     * Returns an immutable copy with a readable name used in timeout messages.
-     *
-     * @param elementName readable element name
-     * @return named element
-     */
-    public Element named(String elementName) {
-        return new Element(resolver, context, requireNonBlank(elementName, "Element name"));
+                driver -> findFirstVisibleChild(driver, childLocator),
+                context);
     }
 
     /** Waits until the element is visible and enabled, then clicks it. */
     public void click() {
-        waitUntil("click " + description, currentDriver -> {
+        createWait("click element", currentDriver -> {
             WebElement element = findVisible(currentDriver);
             if (element == null || !element.isEnabled()) {
                 return null;
             }
-            element.click();
+            try {
+                element.click();
+            } catch (ElementNotInteractableException e) {
+                scrollToCenter(currentDriver, element);
+                element.click();
+            }
             return Boolean.TRUE;
-        }).ignoring(ElementClickInterceptedException.class, ElementNotInteractableException.class)
-                .await();
+        }).await();
     }
 
     /**
@@ -103,14 +95,14 @@ public final class Element {
      */
     public void sendKeys(CharSequence... keys) {
         Objects.requireNonNull(keys, "Keys must not be null");
-        performWhenVisible("send keys to " + description, element -> element.sendKeys(keys))
+        performWhenVisible("send keys to element", element -> element.sendKeys(keys))
                 .ignoring(ElementNotInteractableException.class)
                 .await();
     }
 
     /** Waits until the element is visible and editable, then clears it. */
     public void clear() {
-        performWhenVisible("clear " + description, WebElement::clear)
+        performWhenVisible("clear element", WebElement::clear)
                 .ignoring(InvalidElementStateException.class)
                 .await();
     }
@@ -121,7 +113,10 @@ public final class Element {
      * @return visible element text
      */
     public String getText() {
-        return readWhenVisible("read text from " + description, WebElement::getText);
+        return createWait("read element text", driver -> {
+            WebElement element = findVisible(driver);
+            return element == null ? null : new WaitResult<>(element.getText());
+        }).await().value();
     }
 
     /**
@@ -132,9 +127,11 @@ public final class Element {
      */
     public String getAttribute(String attributeName) {
         String validName = requireNonBlank(attributeName, "Attribute name");
-        return read(
-                "read attribute '" + validName + "' from " + description,
-                element -> element.getAttribute(validName));
+        return createWait(
+                "read element attribute '" + validName + "'",
+                driver -> new WaitResult<>(findElement(driver).getAttribute(validName)))
+                .await()
+                .value();
     }
 
     /**
@@ -144,7 +141,7 @@ public final class Element {
      */
     public boolean isDisplayed() {
         try {
-            resolveVisible();
+            createWait("find visible element", this::findVisible).await();
             return true;
         } catch (TimeoutException e) {
             return false;
@@ -157,7 +154,11 @@ public final class Element {
      * @return enabled state
      */
     public boolean isEnabled() {
-        return read("read enabled state of " + description, WebElement::isEnabled);
+        return createWait(
+                "read element enabled state",
+                driver -> new WaitResult<>(findElement(driver).isEnabled()))
+                .await()
+                .value();
     }
 
     /**
@@ -166,40 +167,11 @@ public final class Element {
      * @return selected state
      */
     public boolean isSelected() {
-        return read("read selected state of " + description, WebElement::isSelected);
-    }
-
-    /**
-     * Creates a configurable wait for a custom action after the element exists.
-     *
-     * @param actionDescription description used in timeout messages
-     * @param action custom Selenium action
-     * @return configurable wait; the action runs only when {@link ElementWait#await()} is called
-     */
-    public ElementWait<Boolean> perform(
-            String actionDescription,
-            Consumer<WebElement> action) {
-        Objects.requireNonNull(action, "Element action must not be null");
-        return waitUntil(requireNonBlank(actionDescription, "Action description"), currentDriver -> {
-            action.accept(resolve(currentDriver));
-            return Boolean.TRUE;
-        });
-    }
-
-    /**
-     * Executes a custom read after the element exists. A successful read may return {@code null}.
-     *
-     * @param readDescription description used in timeout messages
-     * @param reader custom element reader
-     * @param <T> result type
-     * @return read result, including {@code null}
-     */
-    public <T> T read(
-            String readDescription,
-            Function<WebElement, T> reader) {
-        Objects.requireNonNull(reader, "Element reader must not be null");
-        return waitUntil(requireNonBlank(readDescription, "Read description"), currentDriver ->
-                new WaitResult<>(reader.apply(resolve(currentDriver)))).await().value();
+        return createWait(
+                "read element selected state",
+                driver -> new WaitResult<>(findElement(driver).isSelected()))
+                .await()
+                .value();
     }
 
     /**
@@ -214,29 +186,38 @@ public final class Element {
             String conditionDescription,
             Predicate<WebElement> condition) {
         Objects.requireNonNull(condition, "Element condition must not be null");
-        return waitUntil(requireNonBlank(conditionDescription, "Condition description"), currentDriver ->
-                condition.test(resolve(currentDriver)) ? Boolean.TRUE : null);
+        return createWait(requireNonBlank(conditionDescription, "Condition description"), currentDriver ->
+                condition.test(findElement(currentDriver)) ? Boolean.TRUE : null);
     }
 
-    private WebElement resolveVisible() {
-        return waitUntil("find visible " + description, this::findVisible).await();
-    }
-
-    private WebElement resolve(WebDriver driver) {
-        // The resolver is a saved locator lambda. Every invocation performs findElement again;
-        // therefore a wait retry never reuses the WebElement from the previous attempt.
-        return resolver.apply(driver);
+    private WebElement findElement(WebDriver driver) {
+        // Every retry runs the stored lookup again instead of reusing an old WebElement.
+        return elementFinder.apply(driver);
     }
 
     private WebElement findVisible(WebDriver driver) {
-        WebElement element = resolve(driver);
+        WebElement element = findElement(driver);
         return element.isDisplayed() ? element : null;
+    }
+
+    private void scrollToCenter(WebDriver driver, WebElement element) {
+        ((JavascriptExecutor) driver).executeScript(
+                "arguments[0].scrollIntoView({block: 'center', inline: 'center'});",
+                element);
+    }
+
+    private WebElement findFirstVisibleChild(WebDriver driver, By childLocator) {
+        WebElement parent = findElement(driver);
+        List<WebElement> visibleChildren = ExpectedConditions
+                .visibilityOfNestedElementsLocatedBy(parent, childLocator)
+                .apply(driver);
+        return visibleChildren == null || visibleChildren.isEmpty() ? null : visibleChildren.get(0);
     }
 
     private ElementWait<Boolean> performWhenVisible(
             String actionDescription,
             Consumer<WebElement> action) {
-        return waitUntil(actionDescription, currentDriver -> {
+        return createWait(actionDescription, currentDriver -> {
             WebElement element = findVisible(currentDriver);
             if (element == null) {
                 return null;
@@ -246,24 +227,15 @@ public final class Element {
         });
     }
 
-    private <T> T readWhenVisible(
-            String readDescription,
-            Function<WebElement, T> reader) {
-        return waitUntil(readDescription, currentDriver -> {
-            WebElement element = findVisible(currentDriver);
-            return element == null ? null : new WaitResult<>(reader.apply(element));
-        }).await().value();
-    }
-
-    private <T> ElementWait<T> waitUntil(
-            String defaultTimeoutMessage,
+    private <T> ElementWait<T> createWait(
+            String message,
             Function<WebDriver, T> condition) {
         Configuration configuration = context.configuration();
         return ElementWait.forCondition(condition)
                 .usingDriver(context.driver())
                 .withTimeout(configuration.getTimeout())
                 .pollingEvery(configuration.getPollingInterval())
-                .withMessage(defaultTimeoutMessage);
+                .withMessage(message);
     }
 
     private static String requireNonBlank(String value, String fieldName) {
@@ -271,11 +243,6 @@ public final class Element {
             throw new IllegalArgumentException(fieldName + " must not be blank");
         }
         return value;
-    }
-
-    @Override
-    public String toString() {
-        return "Element{" + description + '}';
     }
 
     private record WaitResult<T>(T value) {

@@ -113,7 +113,7 @@ public final class ElementWait<T> {
         wait.ignoreAll(ignoredExceptions);
         try {
             // FluentWait invokes the whole condition again after an ignored exception. Element
-            // conditions call their resolver on every invocation, which performs findElement again.
+            // conditions run their element finder on every invocation, which performs the lookup again.
             return wait.until(condition);
         } catch (TimeoutException e) {
             throw new ElementTimeoutException(
