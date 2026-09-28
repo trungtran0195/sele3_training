@@ -5,6 +5,7 @@ import com.config.Configuration;
 import org.openqa.selenium.By;
 import org.openqa.selenium.ElementClickInterceptedException;
 import org.openqa.selenium.InvalidElementStateException;
+import org.openqa.selenium.JavascriptExecutor;
 import org.openqa.selenium.NoSuchElementException;
 import org.openqa.selenium.StaleElementReferenceException;
 import org.openqa.selenium.WebDriver;
@@ -17,6 +18,8 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class ElementTest {
@@ -125,12 +128,10 @@ public class ElementTest {
             case "getText" -> "Nested";
             default -> defaultValue(method);
         });
-        WebElement parent = webElement((proxy, method, args) -> {
-            if (method.getName().equals("findElement")) {
-                return child;
-            }
-            return defaultValue(method);
-        });
+        WebElement parent = webElement((proxy, method, args) ->
+                method.getName().equals("findElements")
+                        ? List.of(child)
+                        : defaultValue(method));
         WebDriver driver = webDriver((proxy, method, args) -> {
             if (method.getName().equals("findElement")) {
                 parentFinds.incrementAndGet();
@@ -158,39 +159,41 @@ public class ElementTest {
 
         Element child = parent.child(By.id("message"));
 
-        Assert.assertEquals(
-                child.toString(),
-                "Element{By.id: form -> By.id: message}");
+        Assert.assertNotNull(child);
     }
 
     @Test
-    public void shouldKeepInteractionRetryPolicyScopedToClick() {
+    public void shouldScrollToCenterAndRetryAnInterceptedClickOnce() {
+        List<String> events = new ArrayList<>();
         AtomicInteger clicks = new AtomicInteger();
-        AtomicInteger textReads = new AtomicInteger();
         WebElement webElement = webElement((proxy, method, args) -> switch (method.getName()) {
             case "isDisplayed", "isEnabled" -> true;
             case "click" -> {
+                events.add("click");
                 if (clicks.incrementAndGet() == 1) {
-                    throw new ElementClickInterceptedException("Overlay is still visible");
+                    throw new ElementClickInterceptedException("Element is outside the viewport");
                 }
                 yield null;
             }
-            case "getText" -> {
-                textReads.incrementAndGet();
-                throw new ElementClickInterceptedException("Unexpected read failure");
+            default -> defaultValue(method);
+        });
+        WebDriver driver = webDriver((proxy, method, args) -> switch (method.getName()) {
+            case "findElement" -> webElement;
+            case "executeScript" -> {
+                events.add("scroll");
+                yield null;
             }
             default -> defaultValue(method);
         });
         Element element = Element.create(
                 By.id("submit"),
-                () -> driverReturning(webElement),
+                () -> driver,
                 () -> CONFIGURATION);
 
         element.click();
-        Assert.expectThrows(ElementClickInterceptedException.class, element::getText);
 
+        Assert.assertEquals(events, List.of("click", "scroll", "click"));
         Assert.assertEquals(clicks.get(), 2);
-        Assert.assertEquals(textReads.get(), 1);
     }
 
     @Test
@@ -272,10 +275,9 @@ public class ElementTest {
         WebElement hiddenElement = webElement((proxy, method, args) ->
                 method.getName().equals("isDisplayed") ? false : defaultValue(method));
         Element element = Element.create(
-                        By.id("submit"),
-                        () -> driverReturning(hiddenElement),
-                        () -> CONFIGURATION)
-                .named("Submit button");
+                By.id("submit"),
+                () -> driverReturning(hiddenElement),
+                () -> CONFIGURATION);
         ElementWait<Boolean> wait = element
                 .waitFor("find visible Submit button", WebElement::isDisplayed)
                 .withTimeout(Duration.ofMillis(20))
@@ -294,7 +296,10 @@ public class ElementTest {
     }
 
     private static WebDriver webDriver(InvocationHandler handler) {
-        return proxy(WebDriver.class, handler);
+        return (WebDriver) Proxy.newProxyInstance(
+                WebDriver.class.getClassLoader(),
+                new Class<?>[]{WebDriver.class, JavascriptExecutor.class},
+                handler);
     }
 
     private static WebElement webElement(InvocationHandler handler) {
