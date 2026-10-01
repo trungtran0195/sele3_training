@@ -130,12 +130,35 @@ classDiagram
     %% ASSERTION LAYER
     %% ===============================
     class AssertionManager {
-        +static void assertTrue(BooleanSupplier condition, String message)
-        +static void assertEquals(String actual, String expected, String message)
-        +static void softAssertTrue(BooleanSupplier condition, String message)
-        +static void softAssertEquals(String actual, String expected, String message)
-        +static void assertAll()
+        -Duration timeout
+        -Duration pollingInterval
+        -List~AssertionError~ softFailures
+        +AssertionManager(Configuration configuration)
+        +void assertTrue(boolean condition, String message)
+        +void assertEquals(T actual, T expected, String message)
+        +void awaitTrue(BooleanSupplier condition, String message)
+        +void awaitEquals(Supplier~T~ actualValue, T expected, String message)
+        +void softTrue(boolean condition, String message)
+        +void softEquals(T actual, T expected, String message)
+        +void softAwaitTrue(BooleanSupplier condition, String message)
+        +void softAwaitEquals(Supplier~T~ actualValue, T expected, String message)
+        +void assertAll()
     }
+
+    class AssertionContext {
+        +static void start(Configuration configuration)
+        +static AssertionManager current()
+        +static void finish()
+    }
+
+    class TestNgAssertionListener {
+        +void beforeInvocation(IInvokedMethod method, ITestResult result)
+        +void afterInvocation(IInvokedMethod method, ITestResult result)
+    }
+
+    Configuration --> AssertionManager : supplies retry settings
+    AssertionContext --> AssertionManager : owns per thread
+    TestNgAssertionListener --> AssertionContext : manages lifecycle
 
 
     %% ===============================
@@ -152,8 +175,6 @@ classDiagram
     }
 
     TestBase <|-- LoginTest
-    TestBase ..> AssertionManager : uses assertions
-    Element --> AssertionManager : validates dynamic state
 
     %% ===============================
     %% REPORTER / LISTENER
