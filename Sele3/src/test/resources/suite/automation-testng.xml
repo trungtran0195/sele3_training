@@ -5,6 +5,7 @@
 
     <listeners>
         <listener class-name="com.listener.TestNgReporterListener"/>
+        <listener class-name="com.listener.TestNgAssertionListener"/>
     </listeners>
 
     <test name="Automation Tests">

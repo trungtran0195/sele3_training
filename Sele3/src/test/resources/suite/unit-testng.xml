@@ -8,6 +8,7 @@
 
     <test name="Framework Unit Tests">
         <packages>
+            <package name="com.assertion"/>
             <package name="com.config"/>
             <package name="com.driver"/>
             <package name="com.element"/>
