@@ -1,6 +1,7 @@
 package com.element;
 
 import com.config.Configuration;
+import com.driver.DriverContext;
 import lombok.AccessLevel;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
@@ -18,7 +19,6 @@ import java.util.Objects;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
-import java.util.function.Supplier;
 
 /**
  * A lazy, locator-based element that finds a fresh {@link WebElement} for every operation.
@@ -30,8 +30,6 @@ public final class Element {
 
     @NonNull
     private final Function<WebDriver, WebElement> elementFinder;
-    @NonNull
-    private final ElementContext context;
 
     /**
      * Creates a lazy element from a Selenium locator.
@@ -40,20 +38,9 @@ public final class Element {
      * @return lazy element
      */
     public static Element of(By locator) {
-        return create(locator, ElementContext.currentThread());
-    }
-
-    static Element create(
-            By locator,
-            Supplier<WebDriver> driverSupplier,
-            Supplier<Configuration> configurationSupplier) {
-        return create(locator, ElementContext.of(driverSupplier, configurationSupplier));
-    }
-
-    private static Element create(By locator, ElementContext context) {
         Objects.requireNonNull(locator, "Locator must not be null");
         // Store how to find the element, not a WebElement that may later become stale.
-        return new Element(driver -> driver.findElement(locator), context);
+        return new Element(driver -> driver.findElement(locator));
     }
 
     /**
@@ -66,9 +53,7 @@ public final class Element {
      */
     public Element child(By childLocator) {
         Objects.requireNonNull(childLocator, "Child locator must not be null");
-        return new Element(
-                driver -> findFirstVisibleChild(driver, childLocator),
-                context);
+        return new Element(driver -> findFirstVisibleChild(driver, childLocator));
     }
 
     /** Waits until the element is visible and enabled, then clicks it. */
@@ -85,7 +70,8 @@ public final class Element {
                 element.click();
             }
             return Boolean.TRUE;
-        }).await();
+        }).ignoring(ElementNotInteractableException.class)
+                .await();
     }
 
     /**
@@ -95,9 +81,18 @@ public final class Element {
      */
     public void sendKeys(CharSequence... keys) {
         Objects.requireNonNull(keys, "Keys must not be null");
-        performWhenVisible("send keys to element", element -> element.sendKeys(keys))
-                .ignoring(ElementNotInteractableException.class)
-                .await();
+        createWait("element did not become editable", driver -> {
+            WebElement element = findVisible(driver);
+            if (element == null || !element.isEnabled() || isReadOnly(element)) {
+                return null;
+            }
+            try {
+                element.sendKeys(keys);
+                return Boolean.TRUE;
+            } catch (InvalidElementStateException e) {
+                return null;
+            }
+        }).await();
     }
 
     /** Waits until the element is visible and editable, then clears it. */
@@ -200,6 +195,10 @@ public final class Element {
         return element.isDisplayed() ? element : null;
     }
 
+    private boolean isReadOnly(WebElement element) {
+        return Boolean.parseBoolean(element.getDomProperty("readOnly"));
+    }
+
     private void scrollToCenter(WebDriver driver, WebElement element) {
         ((JavascriptExecutor) driver).executeScript(
                 "arguments[0].scrollIntoView({block: 'center', inline: 'center'});",
@@ -230,9 +229,18 @@ public final class Element {
     private <T> ElementWait<T> createWait(
             String message,
             Function<WebDriver, T> condition) {
-        Configuration configuration = context.configuration();
+        WebDriver driver = DriverContext.getDriver();
+        if (driver == null) {
+            throw new IllegalStateException("WebDriver has not been initialized for this thread");
+        }
+
+        Configuration configuration = DriverContext.getConfig();
+        if (configuration == null) {
+            throw new IllegalStateException("Configuration has not been initialized for this thread");
+        }
+
         return ElementWait.forCondition(condition)
-                .usingDriver(context.driver())
+                .usingDriver(driver)
                 .withTimeout(configuration.getTimeout())
                 .pollingEvery(configuration.getPollingInterval())
                 .withMessage(message);
