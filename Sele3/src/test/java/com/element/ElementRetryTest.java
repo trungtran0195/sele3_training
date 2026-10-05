@@ -2,8 +2,8 @@ package com.element;
 
 import org.openqa.selenium.By;
 import org.openqa.selenium.ElementClickInterceptedException;
-import org.openqa.selenium.ElementNotInteractableException;
 import org.openqa.selenium.InvalidElementStateException;
+import org.openqa.selenium.JavascriptExecutor;
 import org.openqa.selenium.NoSuchElementException;
 import org.openqa.selenium.StaleElementReferenceException;
 import org.openqa.selenium.WebDriver;
@@ -13,192 +13,162 @@ import org.testng.annotations.AfterMethod;
 import org.testng.annotations.Test;
 
 import java.time.Duration;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.concurrent.atomic.AtomicInteger;
 
-import static com.element.ElementTestSupport.defaultValue;
 import static com.element.ElementTestSupport.driverReturning;
 import static com.element.ElementTestSupport.element;
 import static com.element.ElementTestSupport.webDriver;
 import static com.element.ElementTestSupport.webElement;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 /** Verifies Element polling, transient-exception retry, and timeout behavior. */
 public class ElementRetryTest {
 
     @AfterMethod(alwaysRun = true)
-    public void cleanUpDriverManager() {
+    public void cleanUpDriverContext() {
         ElementTestSupport.clearContext();
     }
 
     @Test
     public void shouldFindElementAgainAfterItBecomesStale() {
-        AtomicInteger finds = new AtomicInteger();
-        WebElement stale = webElement((proxy, method, args) -> {
-            if (method.getName().equals("isDisplayed")) {
-                throw new StaleElementReferenceException("DOM changed");
-            }
-            return defaultValue(method);
-        });
-        WebElement current = webElement((proxy, method, args) -> switch (method.getName()) {
-            case "isDisplayed" -> true;
-            case "getText" -> "Updated";
-            default -> defaultValue(method);
-        });
-        WebDriver driver = webDriver((proxy, method, args) ->
-                method.getName().equals("findElement")
-                        ? (finds.getAndIncrement() == 0 ? stale : current)
-                        : defaultValue(method));
+        By locator = By.id("status");
+        WebElement stale = webElement();
+        WebElement current = webElement();
+        WebDriver driver = webDriver();
+        when(driver.findElement(locator)).thenReturn(stale, current);
+        when(stale.isDisplayed()).thenThrow(new StaleElementReferenceException("DOM changed"));
+        when(current.isDisplayed()).thenReturn(true);
+        when(current.getText()).thenReturn("Updated");
 
-        Assert.assertEquals(element(By.id("status"), driver).getText(), "Updated");
-        Assert.assertEquals(finds.get(), 2);
+        Assert.assertEquals(element(locator, driver).getText(), "Updated");
+        verify(driver, times(2)).findElement(locator);
     }
 
     @Test
     public void shouldRetryWhenElementDoesNotExistYet() {
-        AtomicInteger finds = new AtomicInteger();
-        WebElement webElement = webElement((proxy, method, args) -> switch (method.getName()) {
-            case "isDisplayed" -> true;
-            case "getText" -> "Ready";
-            default -> defaultValue(method);
-        });
-        WebDriver driver = webDriver((proxy, method, args) -> {
-            if (method.getName().equals("findElement")) {
-                if (finds.incrementAndGet() == 1) {
-                    throw new NoSuchElementException("Not rendered yet");
-                }
-                return webElement;
-            }
-            return defaultValue(method);
-        });
+        By locator = By.id("status");
+        WebElement webElement = webElement();
+        WebDriver driver = webDriver();
+        when(driver.findElement(locator))
+                .thenThrow(new NoSuchElementException("Not rendered yet"))
+                .thenReturn(webElement);
+        when(webElement.isDisplayed()).thenReturn(true);
+        when(webElement.getText()).thenReturn("Ready");
 
-        Assert.assertEquals(element(By.id("status"), driver).getText(), "Ready");
-        Assert.assertEquals(finds.get(), 2);
+        Assert.assertEquals(element(locator, driver).getText(), "Ready");
+        verify(driver, times(2)).findElement(locator);
     }
 
     @Test
     public void shouldWaitUntilElementIsEnabledBeforeClicking() {
-        AtomicInteger enabledChecks = new AtomicInteger();
-        AtomicInteger clicks = new AtomicInteger();
-        WebElement webElement = webElement((proxy, method, args) -> switch (method.getName()) {
-            case "isDisplayed" -> true;
-            case "isEnabled" -> enabledChecks.incrementAndGet() > 1;
-            case "click" -> {
-                clicks.incrementAndGet();
-                yield null;
-            }
-            default -> defaultValue(method);
-        });
+        WebElement webElement = webElement();
+        when(webElement.isDisplayed()).thenReturn(true);
+        when(webElement.isEnabled()).thenReturn(false, true);
 
         element(By.id("submit"), driverReturning(webElement)).click();
 
-        Assert.assertEquals(clicks.get(), 1);
-        Assert.assertTrue(enabledChecks.get() >= 2);
+        verify(webElement, times(2)).isEnabled();
+        verify(webElement).click();
     }
 
     @Test
-    public void shouldRetryWholeClickWhenClickAfterScrollStillFails() {
-        List<String> events = new ArrayList<>();
-        AtomicInteger clicks = new AtomicInteger();
-        WebElement webElement = webElement((proxy, method, args) -> switch (method.getName()) {
-            case "isDisplayed", "isEnabled" -> true;
-            case "click" -> {
-                events.add("click");
-                int attempt = clicks.incrementAndGet();
-                if (attempt == 1) {
-                    throw new ElementClickInterceptedException("Element is outside the viewport");
-                }
-                if (attempt == 2) {
-                    throw new ElementNotInteractableException("Element is still not interactable");
-                }
-                yield null;
-            }
-            default -> defaultValue(method);
-        });
-        WebDriver driver = webDriver((proxy, method, args) -> switch (method.getName()) {
-            case "findElement" -> webElement;
-            case "executeScript" -> {
-                events.add("scroll");
-                yield null;
-            }
-            default -> defaultValue(method);
-        });
+    public void shouldFindElementAgainAfterScrollingAnInterceptedClick() {
+        By locator = By.id("submit");
+        WebElement first = webElement();
+        WebElement current = webElement();
+        WebDriver driver = webDriver();
+        JavascriptExecutor javascript = (JavascriptExecutor) driver;
+        when(driver.findElement(locator)).thenReturn(first, current);
+        when(first.isDisplayed()).thenReturn(true);
+        when(first.isEnabled()).thenReturn(true);
+        when(current.isDisplayed()).thenReturn(true);
+        when(current.isEnabled()).thenReturn(true);
+        doThrow(new ElementClickInterceptedException("Outside viewport")).when(first).click();
 
-        element(By.id("submit"), driver).click();
+        element(locator, driver).click();
 
-        Assert.assertEquals(events, List.of("click", "scroll", "click", "click"));
-        Assert.assertEquals(clicks.get(), 3);
+        var order = inOrder(driver, first, current);
+        order.verify(driver).findElement(locator);
+        order.verify(first).click();
+        order.verify(javascript).executeScript(anyString(), any());
+        order.verify(driver).findElement(locator);
+        order.verify(current).click();
     }
 
     @Test
     public void shouldRetrySendKeysForInvalidElementState() {
-        AtomicInteger sends = new AtomicInteger();
-        WebElement webElement = webElement((proxy, method, args) -> {
-            if (method.getName().equals("isDisplayed") || method.getName().equals("isEnabled")) {
-                return true;
-            }
-            if (method.getName().equals("sendKeys") && sends.incrementAndGet() == 1) {
-                throw new InvalidElementStateException("Input is temporarily readonly");
-            }
-            return defaultValue(method);
-        });
+        WebElement webElement = webElement();
+        when(webElement.isDisplayed()).thenReturn(true);
+        when(webElement.isEnabled()).thenReturn(true);
+        doThrow(new InvalidElementStateException("Temporarily readonly"))
+                .doNothing()
+                .when(webElement)
+                .sendKeys(any(CharSequence[].class));
 
         element(By.id("input"), driverReturning(webElement)).sendKeys("value");
 
-        Assert.assertEquals(sends.get(), 2);
+        verify(webElement, times(2)).sendKeys(any(CharSequence[].class));
     }
 
     @Test
     public void shouldWaitUntilReadonlyInputBecomesEditable() {
-        AtomicInteger readonlyChecks = new AtomicInteger();
-        AtomicInteger sends = new AtomicInteger();
-        WebElement webElement = webElement((proxy, method, args) -> switch (method.getName()) {
-            case "isDisplayed", "isEnabled" -> true;
-            case "getDomProperty" -> readonlyChecks.incrementAndGet() == 1 ? "true" : "false";
-            case "sendKeys" -> {
-                sends.incrementAndGet();
-                yield null;
-            }
-            default -> defaultValue(method);
-        });
+        WebElement webElement = webElement();
+        when(webElement.isDisplayed()).thenReturn(true);
+        when(webElement.isEnabled()).thenReturn(true);
+        when(webElement.getDomProperty("readOnly")).thenReturn("true", "false");
 
         element(By.id("input"), driverReturning(webElement)).sendKeys("value");
 
-        Assert.assertEquals(readonlyChecks.get(), 2);
-        Assert.assertEquals(sends.get(), 1);
+        verify(webElement, times(2)).getDomProperty("readOnly");
+        verify(webElement).sendKeys(any(CharSequence[].class));
     }
 
     @Test
     public void shouldRetryClearForInvalidElementState() {
-        AtomicInteger clears = new AtomicInteger();
-        WebElement webElement = webElement((proxy, method, args) -> {
-            if (method.getName().equals("isDisplayed")) {
-                return true;
-            }
-            if (method.getName().equals("clear") && clears.incrementAndGet() == 1) {
-                throw new InvalidElementStateException("Input is not editable yet");
-            }
-            return defaultValue(method);
-        });
+        WebElement webElement = webElement();
+        when(webElement.isDisplayed()).thenReturn(true);
+        doThrow(new InvalidElementStateException("Not editable yet"))
+                .doNothing()
+                .when(webElement)
+                .clear();
 
         element(By.id("input"), driverReturning(webElement)).clear();
 
-        Assert.assertEquals(clears.get(), 2);
+        verify(webElement, times(2)).clear();
+    }
+
+    @Test
+    public void shouldRetryWhenNoVisibleChildExistsYet() {
+        By parentLocator = By.id("form");
+        By childLocator = By.className("message");
+        WebElement parent = webElement();
+        WebElement child = webElement();
+        WebDriver driver = webDriver();
+        when(driver.findElement(parentLocator)).thenReturn(parent);
+        when(parent.findElements(childLocator)).thenReturn(java.util.List.of(), java.util.List.of(child));
+        when(child.isDisplayed()).thenReturn(true);
+        when(child.getText()).thenReturn("Ready");
+
+        Assert.assertEquals(element(parentLocator, driver).child(childLocator).getText(), "Ready");
+        verify(parent, times(2)).findElements(childLocator);
     }
 
     @Test
     public void shouldUseCustomTimeoutMessage() {
-        WebElement hiddenElement = webElement((proxy, method, args) ->
-                method.getName().equals("isDisplayed") ? false : defaultValue(method));
+        WebElement hiddenElement = webElement();
+        when(hiddenElement.isDisplayed()).thenReturn(false);
         ElementWait<Boolean> wait = element(By.id("submit"), driverReturning(hiddenElement))
                 .waitFor("submit button visible", WebElement::isDisplayed)
                 .withTimeout(Duration.ofMillis(20))
                 .pollingEvery(Duration.ofMillis(5))
                 .withMessage("Submit button did not become available");
 
-        ElementTimeoutException error = Assert.expectThrows(
-                ElementTimeoutException.class,
-                wait::await);
+        ElementTimeoutException error = Assert.expectThrows(ElementTimeoutException.class, wait::await);
 
         Assert.assertEquals(error.getMessage(), "Submit button did not become available");
         Assert.assertNotNull(error.getCause());
@@ -206,16 +176,14 @@ public class ElementRetryTest {
 
     @Test
     public void shouldUseConditionDescriptionAsDefaultTimeoutMessage() {
-        WebElement hiddenElement = webElement((proxy, method, args) ->
-                method.getName().equals("isDisplayed") ? false : defaultValue(method));
+        WebElement hiddenElement = webElement();
+        when(hiddenElement.isDisplayed()).thenReturn(false);
         ElementWait<Boolean> wait = element(By.id("submit"), driverReturning(hiddenElement))
                 .waitFor("find visible Submit button", WebElement::isDisplayed)
                 .withTimeout(Duration.ofMillis(20))
                 .pollingEvery(Duration.ofMillis(5));
 
-        ElementTimeoutException error = Assert.expectThrows(
-                ElementTimeoutException.class,
-                wait::await);
+        ElementTimeoutException error = Assert.expectThrows(ElementTimeoutException.class, wait::await);
 
         Assert.assertEquals(error.getMessage(), "find visible Submit button");
     }

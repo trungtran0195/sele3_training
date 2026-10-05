@@ -2,78 +2,55 @@ package com.element;
 
 import com.config.ConfigLoader;
 import com.config.Configuration;
-import com.driver.DriverManager;
+import com.driver.DriverContext;
+import org.mockito.MockedStatic;
 import org.openqa.selenium.By;
 import org.openqa.selenium.JavascriptExecutor;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
 
-import java.lang.reflect.Field;
-import java.lang.reflect.InvocationHandler;
-import java.lang.reflect.Method;
-import java.lang.reflect.Proxy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.mockStatic;
+import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.withSettings;
 
 final class ElementTestSupport {
 
     private static final Configuration CONFIGURATION = ConfigLoader.fromSystemProperties();
+    private static final ThreadLocal<MockedStatic<DriverContext>> DRIVER_CONTEXT = new ThreadLocal<>();
 
     private ElementTestSupport() {
     }
 
     static Element element(By locator, WebDriver driver) {
-        DriverManager.cleanup();
-        DriverManager.setConfig(CONFIGURATION);
-        driverThreadLocal().set(driver);
+        clearContext();
+        MockedStatic<DriverContext> context = mockStatic(DriverContext.class);
+        context.when(DriverContext::getDriver).thenReturn(driver);
+        context.when(DriverContext::getConfig).thenReturn(CONFIGURATION);
+        DRIVER_CONTEXT.set(context);
         return Element.of(locator);
     }
 
     static void clearContext() {
-        DriverManager.cleanup();
+        MockedStatic<DriverContext> context = DRIVER_CONTEXT.get();
+        if (context != null) {
+            context.close();
+            DRIVER_CONTEXT.remove();
+        }
     }
 
     static WebDriver driverReturning(WebElement element) {
-        return webDriver((proxy, method, args) ->
-                method.getName().equals("findElement") ? element : defaultValue(method));
+        WebDriver driver = webDriver();
+        when(driver.findElement(any(By.class))).thenReturn(element);
+        return driver;
     }
 
-    static WebDriver webDriver(InvocationHandler handler) {
-        return (WebDriver) Proxy.newProxyInstance(
-                WebDriver.class.getClassLoader(),
-                new Class<?>[]{WebDriver.class, JavascriptExecutor.class},
-                handler);
+    static WebDriver webDriver() {
+        return mock(WebDriver.class, withSettings().extraInterfaces(JavascriptExecutor.class));
     }
 
-    static WebElement webElement(InvocationHandler handler) {
-        return proxy(WebElement.class, handler);
-    }
-
-    static Object defaultValue(Method method) {
-        Class<?> type = method.getReturnType();
-        if (!type.isPrimitive()) {
-            return null;
-        }
-        if (type == boolean.class) {
-            return false;
-        }
-        if (type == char.class) {
-            return '\0';
-        }
-        return 0;
-    }
-
-    @SuppressWarnings("unchecked")
-    private static ThreadLocal<WebDriver> driverThreadLocal() {
-        try {
-            Field field = DriverManager.class.getDeclaredField("DRIVER");
-            field.setAccessible(true);
-            return (ThreadLocal<WebDriver>) field.get(null);
-        } catch (ReflectiveOperationException e) {
-            throw new AssertionError("Cannot install test WebDriver in DriverManager", e);
-        }
-    }
-
-    @SuppressWarnings("unchecked")
-    private static <T> T proxy(Class<T> type, InvocationHandler handler) {
-        return (T) Proxy.newProxyInstance(type.getClassLoader(), new Class<?>[]{type}, handler);
+    static WebElement webElement() {
+        return mock(WebElement.class);
     }
 }

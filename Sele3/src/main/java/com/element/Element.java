@@ -9,7 +9,8 @@ import org.openqa.selenium.By;
 import org.openqa.selenium.ElementNotInteractableException;
 import org.openqa.selenium.InvalidElementStateException;
 import org.openqa.selenium.JavascriptExecutor;
-import org.openqa.selenium.TimeoutException;
+import org.openqa.selenium.NoSuchElementException;
+import org.openqa.selenium.StaleElementReferenceException;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
 import org.openqa.selenium.support.ui.ExpectedConditions;
@@ -67,11 +68,10 @@ public final class Element {
                 element.click();
             } catch (ElementNotInteractableException e) {
                 scrollToCenter(currentDriver, element);
-                element.click();
+                return null;
             }
             return Boolean.TRUE;
-        }).ignoring(ElementNotInteractableException.class)
-                .await();
+        }).await();
     }
 
     /**
@@ -129,16 +129,12 @@ public final class Element {
                 .value();
     }
 
-    /**
-     * Waits for visibility and returns whether the element becomes displayed.
-     *
-     * @return {@code true} when visible before timeout; otherwise {@code false}
-     */
+    /** Returns the element's current displayed state without waiting. */
     public boolean isDisplayed() {
         try {
-            createWait("find visible element", this::findVisible).await();
-            return true;
-        } catch (TimeoutException e) {
+            WebElement element = findElement(DriverContext.getDriver());
+            return element != null && element.isDisplayed();
+        } catch (NoSuchElementException | StaleElementReferenceException e) {
             return false;
         }
     }
@@ -192,7 +188,7 @@ public final class Element {
 
     private WebElement findVisible(WebDriver driver) {
         WebElement element = findElement(driver);
-        return element.isDisplayed() ? element : null;
+        return element != null && element.isDisplayed() ? element : null;
     }
 
     private boolean isReadOnly(WebElement element) {
@@ -230,9 +226,6 @@ public final class Element {
             String message,
             Function<WebDriver, T> condition) {
         WebDriver driver = DriverContext.getDriver();
-        if (driver == null) {
-            throw new IllegalStateException("WebDriver has not been initialized for this thread");
-        }
 
         Configuration configuration = DriverContext.getConfig();
         if (configuration == null) {
