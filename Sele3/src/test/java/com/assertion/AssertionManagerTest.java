@@ -56,26 +56,27 @@ public class AssertionManagerTest {
     }
 
     @Test
-    public void shouldRetryTransientRuntimeException() {
+    public void shouldNotCollectUnrelatedRuntimeException() {
         AssertionManager assertions = manager();
-        AtomicInteger attempts = new AtomicInteger();
 
-        assertions.awaitTrue(() -> {
-            if (attempts.incrementAndGet() < 3) {
-                throw new IllegalStateException("value is not ready");
-            }
-            return true;
-        }, "condition should recover");
+        IllegalStateException failure = Assert.expectThrows(
+                IllegalStateException.class,
+                () -> assertions.softAwaitTrue(
+                        () -> {
+                            throw new IllegalStateException("condition failed unexpectedly");
+                        },
+                        "condition should recover"));
 
-        Assert.assertEquals(attempts.get(), 3);
+        Assert.assertEquals(failure.getMessage(), "condition failed unexpectedly");
+        assertions.assertAll();
     }
 
     @Test
     public void shouldReportLatestActualValueWhenEqualsTimesOut() {
         AssertionManager assertions = manager();
 
-        AssertionError failure = Assert.expectThrows(
-                AssertionError.class,
+        AssertionTimeoutException failure = Assert.expectThrows(
+                AssertionTimeoutException.class,
                 () -> assertions.awaitEquals(() -> "actual", "expected", "values differ"));
 
         Assert.assertEquals(
@@ -94,6 +95,10 @@ public class AssertionManagerTest {
         Assert.assertEquals(combined.getSuppressed().length, 2);
 
         assertions.assertAll();
+
+        assertions.softTrue(false, "new failure");
+        AssertionError nextFailure = Assert.expectThrows(AssertionError.class, assertions::assertAll);
+        Assert.assertEquals(nextFailure.getSuppressed().length, 1);
     }
 
     @Test

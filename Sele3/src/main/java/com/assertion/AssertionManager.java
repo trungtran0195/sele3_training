@@ -50,7 +50,8 @@ public final class AssertionManager {
     /** Retries the condition and stops the test if it never becomes true. */
     public void awaitTrue(BooleanSupplier condition, String message) {
         Objects.requireNonNull(condition, "Assertion condition must not be null");
-        retryUntil(condition, requireMessage(message));
+        String validMessage = requireMessage(message);
+        retryUntil(condition, () -> validMessage);
     }
 
     /** Retries the value supplier until its latest value equals the expected value. */
@@ -80,12 +81,12 @@ public final class AssertionManager {
 
     /** Retries a condition and records a failure only after its timeout. */
     public void softAwaitTrue(BooleanSupplier condition, String message) {
-        recordFailure(() -> awaitTrue(condition, message));
+        recordTimeoutFailure(() -> awaitTrue(condition, message));
     }
 
     /** Retries a value comparison and records a failure only after its timeout. */
     public <T> void softAwaitEquals(Supplier<T> actualValue, T expected, String message) {
-        recordFailure(() -> awaitEquals(actualValue, expected, message));
+        recordTimeoutFailure(() -> awaitEquals(actualValue, expected, message));
     }
 
     /** Throws all recorded soft assertion failures and clears them from this manager. */
@@ -102,31 +103,18 @@ public final class AssertionManager {
         throw combined;
     }
 
-    private void retryUntil(BooleanSupplier condition, String message) {
-        retryUntil(condition, () -> message);
-    }
-
     private void retryUntil(BooleanSupplier condition, Supplier<String> failureMessage) {
         long timeoutNanos = timeout.toNanos();
         long startedAt = System.nanoTime();
-        RuntimeException lastException = null;
 
         while (true) {
-            try {
-                if (condition.getAsBoolean()) {
-                    return;
-                }
-            } catch (RuntimeException e) {
-                lastException = e;
+            if (condition.getAsBoolean()) {
+                return;
             }
 
             long remainingNanos = timeoutNanos - (System.nanoTime() - startedAt);
             if (remainingNanos <= 0) {
-                AssertionError failure = new AssertionError(failureMessage.get());
-                if (lastException != null) {
-                    failure.initCause(lastException);
-                }
-                throw failure;
+                throw new AssertionTimeoutException(failureMessage.get());
             }
 
             pause(Math.min(pollingInterval.toNanos(), remainingNanos));
@@ -137,6 +125,14 @@ public final class AssertionManager {
         try {
             assertion.run();
         } catch (AssertionError failure) {
+            softFailures.add(failure);
+        }
+    }
+
+    private void recordTimeoutFailure(Runnable assertion) {
+        try {
+            assertion.run();
+        } catch (AssertionTimeoutException failure) {
             softFailures.add(failure);
         }
     }

@@ -2,8 +2,6 @@ package com.assertion;
 
 import com.config.Configuration;
 
-import java.util.Objects;
-
 /** Holds the assertion session for the test running on the current thread. */
 public final class AssertionContext {
 
@@ -14,7 +12,6 @@ public final class AssertionContext {
 
     /** Starts an isolated assertion session for the current test thread. */
     public static void start(Configuration configuration) {
-        Objects.requireNonNull(configuration, "Configuration must not be null");
         if (CURRENT.get() != null) {
             throw new IllegalStateException("Assertion session has already started for this thread");
         }

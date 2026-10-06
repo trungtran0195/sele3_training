@@ -1,7 +1,6 @@
 package com.listener;
 
 import com.assertion.AssertionContext;
-import com.config.Configuration;
 import com.driver.DriverContext;
 import org.testng.IInvokedMethod;
 import org.testng.IInvokedMethodListener;
@@ -16,11 +15,7 @@ public final class TestNgAssertionListener implements IInvokedMethodListener {
             return;
         }
 
-        Configuration configuration = DriverContext.getConfig();
-        if (configuration == null) {
-            throw new IllegalStateException("Configuration must be initialized before assertion session starts");
-        }
-        AssertionContext.start(configuration);
+        AssertionContext.start(DriverContext.getConfig());
     }
 
     @Override

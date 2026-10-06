@@ -4,6 +4,7 @@ import org.testng.Assert;
 import org.testng.annotations.Test;
 
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 public class ReporterRegistryTest {
 
@@ -47,5 +48,63 @@ public class ReporterRegistryTest {
 
         Assert.assertEquals(calls.get(), 0);
         Assert.assertTrue(registry.registeredReporters().isEmpty());
+    }
+
+    @Test
+    public void shouldAttachScreenshotToEveryReporter() {
+        ReporterRegistry registry = new ReporterRegistry();
+        AtomicReference<byte[]> received = new AtomicReference<>();
+        registry.register(new Reporter() {
+            @Override
+            public void report(TestEvent event) {
+            }
+
+            @Override
+            public void attachScreenshot(TestEvent event, byte[] screenshot) {
+                received.set(screenshot);
+            }
+        });
+        byte[] screenshot = {1, 2, 3};
+
+        registry.attachScreenshot(
+                new TestEvent("checkout", TestStatus.FAILED, new AssertionError()),
+                screenshot);
+
+        Assert.assertEquals(received.get(), screenshot);
+        Assert.assertNotSame(received.get(), screenshot);
+    }
+
+    @Test
+    public void shouldContinueWhenAReporterCannotAttachScreenshot() {
+        ReporterRegistry registry = new ReporterRegistry();
+        AtomicInteger attachments = new AtomicInteger();
+        registry.register(new ScreenshotReporter(() -> {
+            throw new IllegalStateException("Attachment failure");
+        }));
+        registry.register(new ScreenshotReporter(attachments::incrementAndGet));
+
+        registry.attachScreenshot(
+                new TestEvent("checkout", TestStatus.FAILED, new AssertionError()),
+                new byte[]{1});
+
+        Assert.assertEquals(attachments.get(), 1);
+    }
+
+    private static final class ScreenshotReporter implements Reporter {
+
+        private final Runnable attachment;
+
+        private ScreenshotReporter(Runnable attachment) {
+            this.attachment = attachment;
+        }
+
+        @Override
+        public void report(TestEvent event) {
+        }
+
+        @Override
+        public void attachScreenshot(TestEvent event, byte[] screenshot) {
+            attachment.run();
+        }
     }
 }
