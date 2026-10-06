@@ -11,18 +11,15 @@ import org.testng.annotations.AfterMethod;
 import org.testng.annotations.BeforeMethod;
 import org.testng.annotations.Test;
 
-import java.lang.reflect.InvocationHandler;
-import java.lang.reflect.Method;
-import java.lang.reflect.Proxy;
-import java.nio.file.Path;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicReference;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 public class TestNgAssertionListenerTest {
 
-    private static final Configuration CONFIGURATION = ConfigLoader.fromJsonFile(Path.of(
-            "src", "test", "resources", "config", "defaults.json").toString());
-
+    private static final Configuration CONFIGURATION = ConfigLoader.fromSystemProperties();
     private final TestNgAssertionListener listener = new TestNgAssertionListener();
 
     @BeforeMethod
@@ -38,15 +35,14 @@ public class TestNgAssertionListenerTest {
     @Test
     public void shouldFailTestWhenAutomaticAssertAllFindsSoftFailure() {
         IInvokedMethod method = testMethod();
-        TestResultState state = new TestResultState();
-        ITestResult result = testResult(state);
+        ITestResult result = mock(ITestResult.class);
 
         listener.beforeInvocation(method, result);
         AssertionContext.current().softTrue(false, "soft failure");
         listener.afterInvocation(method, result);
 
-        Assert.assertEquals(state.status.get(), ITestResult.FAILURE);
-        Assert.assertTrue(state.throwable.get() instanceof AssertionError);
+        verify(result).setThrowable(any(AssertionError.class));
+        verify(result).setStatus(ITestResult.FAILURE);
         Assert.expectThrows(IllegalStateException.class, AssertionContext::current);
     }
 
@@ -54,76 +50,34 @@ public class TestNgAssertionListenerTest {
     public void shouldKeepHardFailureAndAttachSoftFailures() {
         IInvokedMethod method = testMethod();
         AssertionError hardFailure = new AssertionError("hard failure");
-        TestResultState state = new TestResultState();
-        state.throwable.set(hardFailure);
-        ITestResult result = testResult(state);
+        ITestResult result = mock(ITestResult.class);
+        when(result.getThrowable()).thenReturn(hardFailure);
 
         listener.beforeInvocation(method, result);
         AssertionContext.current().softTrue(false, "soft failure");
         listener.afterInvocation(method, result);
 
-        Assert.assertSame(state.throwable.get(), hardFailure);
         Assert.assertEquals(hardFailure.getSuppressed().length, 1);
+        verify(result, never()).setThrowable(any());
+        verify(result, never()).setStatus(ITestResult.FAILURE);
     }
 
     @Test
     public void shouldIgnoreConfigurationMethods() {
-        TestResultState state = new TestResultState();
+        IInvokedMethod method = mock(IInvokedMethod.class);
+        when(method.isTestMethod()).thenReturn(false);
+        ITestResult result = mock(ITestResult.class);
 
-        listener.beforeInvocation(configurationMethod(), testResult(state));
+        listener.beforeInvocation(method, result);
+        listener.afterInvocation(method, result);
 
         Assert.expectThrows(IllegalStateException.class, AssertionContext::current);
+        verify(result, never()).setThrowable(any());
     }
 
     private static IInvokedMethod testMethod() {
-        return invokedMethod(true);
-    }
-
-    private static IInvokedMethod configurationMethod() {
-        return invokedMethod(false);
-    }
-
-    private static IInvokedMethod invokedMethod(boolean testMethod) {
-        return proxy(IInvokedMethod.class, (proxy, method, args) ->
-                method.getName().equals("isTestMethod") ? testMethod : defaultValue(method));
-    }
-
-    private static ITestResult testResult(TestResultState state) {
-        return proxy(ITestResult.class, (proxy, method, args) -> switch (method.getName()) {
-            case "getThrowable" -> state.throwable.get();
-            case "setThrowable" -> {
-                state.throwable.set((Throwable) args[0]);
-                yield null;
-            }
-            case "setStatus" -> {
-                state.status.set((Integer) args[0]);
-                yield null;
-            }
-            default -> defaultValue(method);
-        });
-    }
-
-    @SuppressWarnings("unchecked")
-    private static <T> T proxy(Class<T> type, InvocationHandler handler) {
-        return (T) Proxy.newProxyInstance(type.getClassLoader(), new Class<?>[]{type}, handler);
-    }
-
-    private static Object defaultValue(Method method) {
-        Class<?> type = method.getReturnType();
-        if (!type.isPrimitive()) {
-            return null;
-        }
-        if (type == boolean.class) {
-            return false;
-        }
-        if (type == char.class) {
-            return '\0';
-        }
-        return 0;
-    }
-
-    private static final class TestResultState {
-        private final AtomicReference<Throwable> throwable = new AtomicReference<>();
-        private final AtomicInteger status = new AtomicInteger(ITestResult.SUCCESS);
+        IInvokedMethod method = mock(IInvokedMethod.class);
+        when(method.isTestMethod()).thenReturn(true);
+        return method;
     }
 }
