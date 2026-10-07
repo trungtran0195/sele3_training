@@ -2,6 +2,7 @@ package com.element;
 
 import org.openqa.selenium.By;
 import org.openqa.selenium.NoSuchElementException;
+import org.openqa.selenium.StaleElementReferenceException;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
 import org.testng.Assert;
@@ -112,5 +113,18 @@ public class ElementBehaviorTest {
 
         Assert.assertFalse(element(locator, driver).isDisplayed());
         verify(driver).findElement(locator);
+    }
+
+    @Test
+    public void shouldNotTreatAStaleElementAsNotDisplayed() {
+        By locator = By.id("replaced");
+        WebElement staleElement = webElement();
+        WebDriver driver = driverReturning(staleElement);
+        when(staleElement.isDisplayed())
+                .thenThrow(new StaleElementReferenceException("DOM changed"));
+
+        Assert.expectThrows(
+                StaleElementReferenceException.class,
+                () -> element(locator, driver).isDisplayed());
     }
 }

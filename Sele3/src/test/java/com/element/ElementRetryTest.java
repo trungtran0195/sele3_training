@@ -159,6 +159,100 @@ public class ElementRetryTest {
     }
 
     @Test
+    public void shouldRetryReadingChildAttributeUntilChildExists() {
+        By parentLocator = By.id("form");
+        By childLocator = By.id("status");
+        WebElement parent = webElement();
+        WebElement child = webElement();
+        WebDriver driver = webDriver();
+        when(driver.findElement(parentLocator)).thenReturn(parent);
+        when(parent.findElements(childLocator))
+                .thenReturn(java.util.List.of(), java.util.List.of(child));
+        when(child.isDisplayed()).thenReturn(true);
+        when(child.getAttribute("data-state")).thenReturn("ready");
+
+        String state = element(parentLocator, driver)
+                .child(childLocator)
+                .getAttribute("data-state");
+
+        Assert.assertEquals(state, "ready");
+        verify(parent, times(2)).findElements(childLocator);
+    }
+
+    @Test
+    public void shouldRetryReadingChildStateUntilChildExists() {
+        By parentLocator = By.id("form");
+        By childLocator = By.id("option");
+        WebElement parent = webElement();
+        WebElement child = webElement();
+        WebDriver driver = webDriver();
+        when(driver.findElement(parentLocator)).thenReturn(parent);
+        when(parent.findElements(childLocator))
+                .thenReturn(
+                        java.util.List.of(),
+                        java.util.List.of(child),
+                        java.util.List.of(),
+                        java.util.List.of(child));
+        when(child.isDisplayed()).thenReturn(true);
+        when(child.isEnabled()).thenReturn(true);
+        when(child.isSelected()).thenReturn(true);
+        Element childElement = element(parentLocator, driver).child(childLocator);
+
+        Assert.assertTrue(childElement.isEnabled());
+        Assert.assertTrue(childElement.isSelected());
+        verify(parent, times(4)).findElements(childLocator);
+    }
+
+    @Test
+    public void shouldRetryCustomConditionUntilChildIsVisible() {
+        By parentLocator = By.id("form");
+        By childLocator = By.id("status");
+        WebElement parent = webElement();
+        WebElement child = webElement();
+        WebDriver driver = webDriver();
+        when(driver.findElement(parentLocator)).thenReturn(parent);
+        when(parent.findElements(childLocator))
+                .thenReturn(java.util.List.of(), java.util.List.of(child));
+        when(child.isDisplayed()).thenReturn(true);
+        when(child.isEnabled()).thenReturn(true);
+
+        Boolean enabled = element(parentLocator, driver)
+                .child(childLocator)
+                .waitFor("child enabled", WebElement::isEnabled)
+                .await();
+
+        Assert.assertTrue(enabled);
+        verify(parent, times(2)).findElements(childLocator);
+    }
+
+    @Test
+    public void shouldRetryNestedChildUntilItsParentExists() {
+        By rootLocator = By.id("form");
+        By sectionLocator = By.className("section");
+        By messageLocator = By.className("message");
+        WebElement root = webElement();
+        WebElement section = webElement();
+        WebElement message = webElement();
+        WebDriver driver = webDriver();
+        when(driver.findElement(rootLocator)).thenReturn(root);
+        when(root.findElements(sectionLocator))
+                .thenReturn(java.util.List.of(), java.util.List.of(section));
+        when(section.isDisplayed()).thenReturn(true);
+        when(section.findElements(messageLocator)).thenReturn(java.util.List.of(message));
+        when(message.isDisplayed()).thenReturn(true);
+        when(message.getText()).thenReturn("Ready");
+
+        String text = element(rootLocator, driver)
+                .child(sectionLocator)
+                .child(messageLocator)
+                .getText();
+
+        Assert.assertEquals(text, "Ready");
+        verify(root, times(2)).findElements(sectionLocator);
+        verify(section).findElements(messageLocator);
+    }
+
+    @Test
     public void shouldUseCustomTimeoutMessage() {
         WebElement hiddenElement = webElement();
         when(hiddenElement.isDisplayed()).thenReturn(false);

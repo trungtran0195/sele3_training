@@ -10,7 +10,6 @@ import org.openqa.selenium.ElementNotInteractableException;
 import org.openqa.selenium.InvalidElementStateException;
 import org.openqa.selenium.JavascriptExecutor;
 import org.openqa.selenium.NoSuchElementException;
-import org.openqa.selenium.StaleElementReferenceException;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
 import org.openqa.selenium.support.ui.ExpectedConditions;
@@ -122,9 +121,10 @@ public final class Element {
      */
     public String getAttribute(String attributeName) {
         String validName = requireNonBlank(attributeName, "Attribute name");
-        return createWait(
-                "read element attribute '" + validName + "'",
-                driver -> new WaitResult<>(findElement(driver).getAttribute(validName)))
+        return createWait("read element attribute '" + validName + "'", driver -> {
+            WebElement element = findElement(driver);
+            return element == null ? null : new WaitResult<>(element.getAttribute(validName));
+        })
                 .await()
                 .value();
     }
@@ -134,7 +134,7 @@ public final class Element {
         try {
             WebElement element = findElement(DriverContext.getDriver());
             return element != null && element.isDisplayed();
-        } catch (NoSuchElementException | StaleElementReferenceException e) {
+        } catch (NoSuchElementException e) {
             return false;
         }
     }
@@ -145,9 +145,10 @@ public final class Element {
      * @return enabled state
      */
     public boolean isEnabled() {
-        return createWait(
-                "read element enabled state",
-                driver -> new WaitResult<>(findElement(driver).isEnabled()))
+        return createWait("read element enabled state", driver -> {
+            WebElement element = findElement(driver);
+            return element == null ? null : new WaitResult<>(element.isEnabled());
+        })
                 .await()
                 .value();
     }
@@ -158,9 +159,10 @@ public final class Element {
      * @return selected state
      */
     public boolean isSelected() {
-        return createWait(
-                "read element selected state",
-                driver -> new WaitResult<>(findElement(driver).isSelected()))
+        return createWait("read element selected state", driver -> {
+            WebElement element = findElement(driver);
+            return element == null ? null : new WaitResult<>(element.isSelected());
+        })
                 .await()
                 .value();
     }
@@ -177,8 +179,10 @@ public final class Element {
             String conditionDescription,
             Predicate<WebElement> condition) {
         Objects.requireNonNull(condition, "Element condition must not be null");
-        return createWait(requireNonBlank(conditionDescription, "Condition description"), currentDriver ->
-                condition.test(findElement(currentDriver)) ? Boolean.TRUE : null);
+        return createWait(requireNonBlank(conditionDescription, "Condition description"), currentDriver -> {
+            WebElement element = findElement(currentDriver);
+            return element != null && condition.test(element) ? Boolean.TRUE : null;
+        });
     }
 
     private WebElement findElement(WebDriver driver) {
@@ -203,6 +207,9 @@ public final class Element {
 
     private WebElement findFirstVisibleChild(WebDriver driver, By childLocator) {
         WebElement parent = findElement(driver);
+        if (parent == null) {
+            return null;
+        }
         List<WebElement> visibleChildren = ExpectedConditions
                 .visibilityOfNestedElementsLocatedBy(parent, childLocator)
                 .apply(driver);
