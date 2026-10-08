@@ -10,6 +10,7 @@ import org.openqa.selenium.ElementNotInteractableException;
 import org.openqa.selenium.InvalidElementStateException;
 import org.openqa.selenium.JavascriptExecutor;
 import org.openqa.selenium.NoSuchElementException;
+import org.openqa.selenium.StaleElementReferenceException;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
 import org.openqa.selenium.support.ui.ExpectedConditions;
@@ -131,11 +132,12 @@ public final class Element {
 
     /** Returns the element's current displayed state without waiting. */
     public boolean isDisplayed() {
+        WebDriver driver = DriverContext.getDriver();
         try {
-            WebElement element = findElement(DriverContext.getDriver());
-            return element != null && element.isDisplayed();
-        } catch (NoSuchElementException e) {
-            return false;
+            return isCurrentlyDisplayed(driver);
+        } catch (StaleElementReferenceException e) {
+            // The DOM may have replaced the element between lookup and state checking.
+            return isCurrentlyDisplayed(driver);
         }
     }
 
@@ -193,6 +195,15 @@ public final class Element {
     private WebElement findVisible(WebDriver driver) {
         WebElement element = findElement(driver);
         return element != null && element.isDisplayed() ? element : null;
+    }
+
+    private boolean isCurrentlyDisplayed(WebDriver driver) {
+        try {
+            WebElement element = findElement(driver);
+            return element != null && element.isDisplayed();
+        } catch (NoSuchElementException e) {
+            return false;
+        }
     }
 
     private boolean isReadOnly(WebElement element) {

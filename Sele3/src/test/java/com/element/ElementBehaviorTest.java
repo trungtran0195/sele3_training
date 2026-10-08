@@ -116,15 +116,35 @@ public class ElementBehaviorTest {
     }
 
     @Test
-    public void shouldNotTreatAStaleElementAsNotDisplayed() {
+    public void shouldFindElementAgainWhenCheckingAStaleElement() {
         By locator = By.id("replaced");
         WebElement staleElement = webElement();
-        WebDriver driver = driverReturning(staleElement);
+        WebElement currentElement = webElement();
+        WebDriver driver = webDriver();
+        when(driver.findElement(locator)).thenReturn(staleElement, currentElement);
         when(staleElement.isDisplayed())
                 .thenThrow(new StaleElementReferenceException("DOM changed"));
+        when(currentElement.isDisplayed()).thenReturn(true);
+
+        Assert.assertTrue(element(locator, driver).isDisplayed());
+        verify(driver, times(2)).findElement(locator);
+    }
+
+    @Test
+    public void shouldPropagateStaleWhenImmediateRetryAlsoFails() {
+        By locator = By.id("unstable");
+        WebElement firstElement = webElement();
+        WebElement secondElement = webElement();
+        WebDriver driver = webDriver();
+        when(driver.findElement(locator)).thenReturn(firstElement, secondElement);
+        when(firstElement.isDisplayed())
+                .thenThrow(new StaleElementReferenceException("First DOM change"));
+        when(secondElement.isDisplayed())
+                .thenThrow(new StaleElementReferenceException("Second DOM change"));
 
         Assert.expectThrows(
                 StaleElementReferenceException.class,
                 () -> element(locator, driver).isDisplayed());
+        verify(driver, times(2)).findElement(locator);
     }
 }
