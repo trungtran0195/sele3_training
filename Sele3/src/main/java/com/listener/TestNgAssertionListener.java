@@ -1,7 +1,6 @@
 package com.listener;
 
 import com.assertion.AssertionContext;
-import com.driver.DriverContext;
 import org.testng.IInvokedMethod;
 import org.testng.IInvokedMethodListener;
 import org.testng.ITestResult;
@@ -15,7 +14,7 @@ public final class TestNgAssertionListener implements IInvokedMethodListener {
             return;
         }
 
-        AssertionContext.start(DriverContext.getConfig());
+        AssertionContext.current();
     }
 
     @Override
@@ -28,7 +27,7 @@ public final class TestNgAssertionListener implements IInvokedMethodListener {
             AssertionContext.finish();
         } catch (AssertionError softFailure) {
             Throwable testFailure = testResult.getThrowable();
-            if (testFailure != null) {
+            if (testResult.getStatus() == ITestResult.FAILURE && testFailure != null) {
                 testFailure.addSuppressed(softFailure);
                 return;
             }

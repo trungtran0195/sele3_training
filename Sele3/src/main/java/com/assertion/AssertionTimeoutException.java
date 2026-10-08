@@ -6,4 +6,8 @@ public final class AssertionTimeoutException extends AssertionError {
     public AssertionTimeoutException(String message) {
         super(message);
     }
+
+    public AssertionTimeoutException(String message, Throwable cause) {
+        super(message, cause);
+    }
 }

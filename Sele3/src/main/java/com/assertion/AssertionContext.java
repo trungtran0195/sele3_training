@@ -1,6 +1,7 @@
 package com.assertion;
 
 import com.config.Configuration;
+import com.driver.DriverContext;
 
 /** Holds the assertion session for the test running on the current thread. */
 public final class AssertionContext {
@@ -10,19 +11,16 @@ public final class AssertionContext {
     private AssertionContext() {
     }
 
-    /** Starts an isolated assertion session for the current test thread. */
-    public static void start(Configuration configuration) {
-        if (CURRENT.get() != null) {
-            throw new IllegalStateException("Assertion session has already started for this thread");
-        }
-        CURRENT.set(new AssertionManager(configuration));
-    }
-
-    /** Returns the assertion manager associated with the current test thread. */
+    /**
+     * Returns the assertion manager associated with the current test thread, creating it from the
+     * thread's configuration on first use.
+     */
     public static AssertionManager current() {
         AssertionManager assertions = CURRENT.get();
         if (assertions == null) {
-            throw new IllegalStateException("Assertion session has not been started for this thread");
+            Configuration configuration = DriverContext.getConfig();
+            assertions = new AssertionManager(configuration);
+            CURRENT.set(assertions);
         }
         return assertions;
     }

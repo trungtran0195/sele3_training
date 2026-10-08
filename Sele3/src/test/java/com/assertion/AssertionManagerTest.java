@@ -1,5 +1,6 @@
 package com.assertion;
 
+import org.openqa.selenium.TimeoutException;
 import org.testng.Assert;
 import org.testng.annotations.Test;
 
@@ -69,6 +70,22 @@ public class AssertionManagerTest {
 
         Assert.assertEquals(failure.getMessage(), "condition failed unexpectedly");
         assertions.assertAll();
+    }
+
+    @Test
+    public void shouldNotWrapTimeoutFromAConditionThatPerformsItsOwnWait() {
+        AssertionManager assertions = manager();
+        TimeoutException innerTimeout = new TimeoutException("inner wait timed out");
+
+        TimeoutException failure = Assert.expectThrows(
+                TimeoutException.class,
+                () -> assertions.awaitTrue(
+                        () -> {
+                            throw innerTimeout;
+                        },
+                        "condition should become true"));
+
+        Assert.assertSame(failure, innerTimeout);
     }
 
     @Test

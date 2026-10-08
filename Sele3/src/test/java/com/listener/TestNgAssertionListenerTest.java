@@ -29,7 +29,11 @@ public class TestNgAssertionListenerTest {
 
     @AfterMethod(alwaysRun = true)
     public void cleanUp() {
-        DriverManager.cleanup();
+        try {
+            AssertionContext.finish();
+        } finally {
+            DriverManager.cleanup();
+        }
     }
 
     @Test
@@ -43,7 +47,6 @@ public class TestNgAssertionListenerTest {
 
         verify(result).setThrowable(any(AssertionError.class));
         verify(result).setStatus(ITestResult.FAILURE);
-        Assert.expectThrows(IllegalStateException.class, AssertionContext::current);
     }
 
     @Test
@@ -52,6 +55,7 @@ public class TestNgAssertionListenerTest {
         AssertionError hardFailure = new AssertionError("hard failure");
         ITestResult result = mock(ITestResult.class);
         when(result.getThrowable()).thenReturn(hardFailure);
+        when(result.getStatus()).thenReturn(ITestResult.FAILURE);
 
         listener.beforeInvocation(method, result);
         AssertionContext.current().softTrue(false, "soft failure");
@@ -63,6 +67,40 @@ public class TestNgAssertionListenerTest {
     }
 
     @Test
+    public void shouldFailSuccessfulExpectedExceptionTestWhenSoftAssertionFailed() {
+        IInvokedMethod method = testMethod();
+        RuntimeException expectedException = new RuntimeException("expected exception");
+        ITestResult result = mock(ITestResult.class);
+        when(result.getStatus()).thenReturn(ITestResult.SUCCESS);
+        when(result.getThrowable()).thenReturn(expectedException);
+
+        listener.beforeInvocation(method, result);
+        AssertionContext.current().softTrue(false, "soft failure");
+        listener.afterInvocation(method, result);
+
+        verify(result).setThrowable(any(AssertionError.class));
+        verify(result).setStatus(ITestResult.FAILURE);
+        Assert.assertEquals(expectedException.getSuppressed().length, 0);
+    }
+
+    @Test
+    public void shouldFailSkippedTestWhenSoftAssertionAlreadyFailed() {
+        IInvokedMethod method = testMethod();
+        RuntimeException skipReason = new RuntimeException("skip reason");
+        ITestResult result = mock(ITestResult.class);
+        when(result.getStatus()).thenReturn(ITestResult.SKIP);
+        when(result.getThrowable()).thenReturn(skipReason);
+
+        listener.beforeInvocation(method, result);
+        AssertionContext.current().softTrue(false, "soft failure");
+        listener.afterInvocation(method, result);
+
+        verify(result).setThrowable(any(AssertionError.class));
+        verify(result).setStatus(ITestResult.FAILURE);
+        Assert.assertEquals(skipReason.getSuppressed().length, 0);
+    }
+
+    @Test
     public void shouldIgnoreConfigurationMethods() {
         IInvokedMethod method = mock(IInvokedMethod.class);
         when(method.isTestMethod()).thenReturn(false);
@@ -71,7 +109,6 @@ public class TestNgAssertionListenerTest {
         listener.beforeInvocation(method, result);
         listener.afterInvocation(method, result);
 
-        Assert.expectThrows(IllegalStateException.class, AssertionContext::current);
         verify(result, never()).setThrowable(any());
     }
 
