@@ -13,7 +13,6 @@ import org.openqa.selenium.NoSuchElementException;
 import org.openqa.selenium.StaleElementReferenceException;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
-import org.openqa.selenium.support.ui.ExpectedConditions;
 
 import java.util.List;
 import java.util.Objects;
@@ -45,16 +44,15 @@ public final class Element {
     }
 
     /**
-     * Creates a lazy child element. When an operation is executed, Selenium's
-     * {@link ExpectedConditions#visibilityOfNestedElementsLocatedBy(WebElement, By)} finds the
-     * visible children inside a freshly found parent. The first matching child is used.
+     * Creates a lazy child element. Each operation finds the parent again and uses the first
+     * matching child. Operations that require visibility apply that requirement separately.
      *
      * @param childLocator locator relative to this element
      * @return lazy child element
      */
     public Element child(By childLocator) {
         Objects.requireNonNull(childLocator, "Child locator must not be null");
-        return new Element(driver -> findFirstVisibleChild(driver, childLocator));
+        return new Element(driver -> findFirstChild(driver, childLocator));
     }
 
     /** Waits until the element is visible and enabled, then clicks it. */
@@ -216,15 +214,13 @@ public final class Element {
                 element);
     }
 
-    private WebElement findFirstVisibleChild(WebDriver driver, By childLocator) {
+    private WebElement findFirstChild(WebDriver driver, By childLocator) {
         WebElement parent = findElement(driver);
         if (parent == null) {
             return null;
         }
-        List<WebElement> visibleChildren = ExpectedConditions
-                .visibilityOfNestedElementsLocatedBy(parent, childLocator)
-                .apply(driver);
-        return visibleChildren == null || visibleChildren.isEmpty() ? null : visibleChildren.get(0);
+        List<WebElement> children = parent.findElements(childLocator);
+        return children.isEmpty() ? null : children.get(0);
     }
 
     private ElementWait<Boolean> performWhenVisible(

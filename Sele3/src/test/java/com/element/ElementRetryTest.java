@@ -6,6 +6,7 @@ import org.openqa.selenium.InvalidElementStateException;
 import org.openqa.selenium.JavascriptExecutor;
 import org.openqa.selenium.NoSuchElementException;
 import org.openqa.selenium.StaleElementReferenceException;
+import org.openqa.selenium.TimeoutException;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
 import org.testng.Assert;
@@ -143,7 +144,7 @@ public class ElementRetryTest {
     }
 
     @Test
-    public void shouldRetryWhenNoVisibleChildExistsYet() {
+    public void shouldRetryWhenChildDoesNotExistYet() {
         By parentLocator = By.id("form");
         By childLocator = By.className("message");
         WebElement parent = webElement();
@@ -168,7 +169,6 @@ public class ElementRetryTest {
         when(driver.findElement(parentLocator)).thenReturn(parent);
         when(parent.findElements(childLocator))
                 .thenReturn(java.util.List.of(), java.util.List.of(child));
-        when(child.isDisplayed()).thenReturn(true);
         when(child.getAttribute("data-state")).thenReturn("ready");
 
         String state = element(parentLocator, driver)
@@ -193,7 +193,6 @@ public class ElementRetryTest {
                         java.util.List.of(child),
                         java.util.List.of(),
                         java.util.List.of(child));
-        when(child.isDisplayed()).thenReturn(true);
         when(child.isEnabled()).thenReturn(true);
         when(child.isSelected()).thenReturn(true);
         Element childElement = element(parentLocator, driver).child(childLocator);
@@ -204,7 +203,7 @@ public class ElementRetryTest {
     }
 
     @Test
-    public void shouldRetryCustomConditionUntilChildIsVisible() {
+    public void shouldRetryCustomConditionUntilChildExists() {
         By parentLocator = By.id("form");
         By childLocator = By.id("status");
         WebElement parent = webElement();
@@ -213,7 +212,6 @@ public class ElementRetryTest {
         when(driver.findElement(parentLocator)).thenReturn(parent);
         when(parent.findElements(childLocator))
                 .thenReturn(java.util.List.of(), java.util.List.of(child));
-        when(child.isDisplayed()).thenReturn(true);
         when(child.isEnabled()).thenReturn(true);
 
         Boolean enabled = element(parentLocator, driver)
@@ -237,7 +235,6 @@ public class ElementRetryTest {
         when(driver.findElement(rootLocator)).thenReturn(root);
         when(root.findElements(sectionLocator))
                 .thenReturn(java.util.List.of(), java.util.List.of(section));
-        when(section.isDisplayed()).thenReturn(true);
         when(section.findElements(messageLocator)).thenReturn(java.util.List.of(message));
         when(message.isDisplayed()).thenReturn(true);
         when(message.getText()).thenReturn("Ready");
@@ -265,7 +262,7 @@ public class ElementRetryTest {
         ElementTimeoutException error = Assert.expectThrows(ElementTimeoutException.class, wait::await);
 
         Assert.assertEquals(error.getMessage(), "Submit button did not become available");
-        Assert.assertNotNull(error.getCause());
+        Assert.assertNull(error.getCause());
     }
 
     @Test
@@ -280,5 +277,22 @@ public class ElementRetryTest {
         ElementTimeoutException error = Assert.expectThrows(ElementTimeoutException.class, wait::await);
 
         Assert.assertEquals(error.getMessage(), "find visible Submit button");
+    }
+
+    @Test
+    public void shouldPropagateTimeoutThrownByTheCondition() {
+        WebElement webElement = webElement();
+        TimeoutException commandTimeout = new TimeoutException("Selenium command timed out");
+        ElementWait<Boolean> wait = element(By.id("status"), driverReturning(webElement))
+                .waitFor(
+                        "status should become ready",
+                        ignored -> {
+                            throw commandTimeout;
+                        });
+
+        TimeoutException failure = Assert.expectThrows(TimeoutException.class, wait::await);
+
+        Assert.assertSame(failure, commandTimeout);
+        Assert.assertFalse(failure instanceof ElementTimeoutException);
     }
 }

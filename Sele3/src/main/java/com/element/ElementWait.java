@@ -2,7 +2,6 @@ package com.element;
 
 import org.openqa.selenium.NoSuchElementException;
 import org.openqa.selenium.StaleElementReferenceException;
-import org.openqa.selenium.TimeoutException;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.support.ui.WebDriverWait;
 
@@ -103,7 +102,18 @@ public final class ElementWait<T> {
     public T await() {
         WebDriverWait wait = new WebDriverWait(
                 Objects.requireNonNull(driver, "WebDriver has not been configured"),
-                Objects.requireNonNull(timeout, "Wait timeout has not been configured"));
+                Objects.requireNonNull(timeout, "Wait timeout has not been configured")) {
+            @Override
+            protected RuntimeException timeoutException(
+                    String message,
+                    Throwable lastException) {
+                return new ElementTimeoutException(
+                        Objects.requireNonNullElse(
+                                ElementWait.this.timeoutMessage,
+                                "Element wait timed out"),
+                        lastException);
+            }
+        };
         wait
                 .pollingEvery(Objects.requireNonNull(
                         pollingInterval,
@@ -111,15 +121,9 @@ public final class ElementWait<T> {
                 .ignoring(NoSuchElementException.class)
                 .ignoring(StaleElementReferenceException.class);
         wait.ignoreAll(ignoredExceptions);
-        try {
-            // FluentWait invokes the whole condition again after an ignored exception. Element
-            // conditions run their element finder on every invocation, which performs the lookup again.
-            return wait.until(condition);
-        } catch (TimeoutException e) {
-            throw new ElementTimeoutException(
-                    Objects.requireNonNullElse(timeoutMessage, "Element wait timed out"),
-                    e);
-        }
+        // FluentWait invokes the whole condition again after an ignored exception. Element
+        // conditions run their element finder on every invocation, which performs the lookup again.
+        return wait.until(condition);
     }
 
     private static Duration requirePositive(Duration duration, String fieldName) {

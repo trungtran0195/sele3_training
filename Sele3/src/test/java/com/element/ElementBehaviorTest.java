@@ -94,6 +94,26 @@ public class ElementBehaviorTest {
     }
 
     @Test
+    public void shouldReadHiddenChildPropertiesWithoutRequiringVisibility() {
+        By parentLocator = By.id("form");
+        By childLocator = By.id("hidden-control");
+        WebElement parent = webElement();
+        WebElement hiddenChild = webElement();
+        WebDriver driver = webDriver();
+        when(driver.findElement(parentLocator)).thenReturn(parent);
+        when(parent.findElements(childLocator)).thenReturn(List.of(hiddenChild));
+        when(hiddenChild.getAttribute("value")).thenReturn("hidden-value");
+        when(hiddenChild.isEnabled()).thenReturn(true);
+        when(hiddenChild.isSelected()).thenReturn(true);
+        Element child = element(parentLocator, driver).child(childLocator);
+
+        Assert.assertEquals(child.getAttribute("value"), "hidden-value");
+        Assert.assertTrue(child.isEnabled());
+        Assert.assertTrue(child.isSelected());
+        verify(hiddenChild, never()).isDisplayed();
+    }
+
+    @Test
     public void shouldCheckDisplayedStateWithoutWaiting() {
         By locator = By.id("status");
         WebElement hiddenElement = webElement();
