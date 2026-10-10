@@ -1,0 +1,15 @@
+<!DOCTYPE suite SYSTEM "https://testng.org/testng-1.0.dtd">
+<suite name="Automation Test Suite">
+    <parameter name="config.file" value="src/test/resources/config/chrome.json"/>
+    <parameter name="reporters" value="console"/>
+
+    <listeners>
+        <listener class-name="com.listener.TestNgReporterListener"/>
+    </listeners>
+
+    <test name="Automation Tests">
+        <packages>
+            <package name="com.tests"/>
+        </packages>
+    </test>
+</suite>

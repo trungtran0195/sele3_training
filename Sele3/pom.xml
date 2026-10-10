@@ -16,12 +16,14 @@
         <slf4j.version>2.0.17</slf4j.version>
         <lombok.version>1.18.38</lombok.version>
         <testng.version>7.11.0</testng.version>
+        <mockito.version>5.20.0</mockito.version>
         <gson.version>2.11.0</gson.version>
         <allure.version>2.25.0</allure.version>
         <extentreports.version>5.0.8</extentreports.version>
         <aspectj.version>1.9.20</aspectj.version>
         <compiler.version>3.13.0</compiler.version>
         <surefire.version>3.2.5</surefire.version>
+        <testng.suite>src/test/resources/suite/unit-testng.xml</testng.suite>
     </properties>
 
     <dependencies>
@@ -56,6 +58,12 @@
             <groupId>org.testng</groupId>
             <artifactId>testng</artifactId>
             <version>${testng.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-core</artifactId>
+            <version>${mockito.version}</version>
+            <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>com.google.code.gson</groupId>
@@ -105,7 +113,7 @@
                 <version>${surefire.version}</version>
                 <configuration>
                     <suiteXmlFiles>
-                        <suiteXmlFile>src/test/resources/suite/testng.xml</suiteXmlFile>
+                        <suiteXmlFile>${testng.suite}</suiteXmlFile>
                     </suiteXmlFiles>
                     <argLine>
                         -javaagent:"${settings.localRepository}/org/aspectj/aspectjweaver/${aspectj.version}/aspectjweaver-${aspectj.version}.jar"
@@ -132,4 +140,12 @@
             </plugin>
         </plugins>
     </build>
+    <profiles>
+        <profile>
+            <id>automation-tests</id>
+            <properties>
+                <testng.suite>src/test/resources/suite/automation-testng.xml</testng.suite>
+            </properties>
+        </profile>
+    </profiles>
 </project>
