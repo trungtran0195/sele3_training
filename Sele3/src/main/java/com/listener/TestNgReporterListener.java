@@ -1,11 +1,16 @@
 package com.listener;
 
 import com.config.ConfigurationException;
+import com.driver.DriverContext;
 import com.report.ConsoleReporter;
 import com.report.Reporter;
 import com.report.ReporterRegistry;
 import com.report.TestEvent;
 import com.report.TestStatus;
+import lombok.extern.slf4j.Slf4j;
+import org.openqa.selenium.OutputType;
+import org.openqa.selenium.TakesScreenshot;
+import org.openqa.selenium.WebDriver;
 import org.testng.ISuite;
 import org.testng.ISuiteListener;
 import org.testng.ITestListener;
@@ -18,6 +23,7 @@ import java.util.Set;
 import java.util.function.Supplier;
 
 /** Converts TestNG lifecycle callbacks into framework-neutral report events. */
+@Slf4j
 public class TestNgReporterListener implements ISuiteListener, ITestListener {
 
     public static final String REPORTERS_PARAMETER = "reporters";
@@ -85,9 +91,35 @@ public class TestNgReporterListener implements ISuiteListener, ITestListener {
             throw new IllegalStateException("Reporter registry has not been initialized");
         }
 
-        registry.publish(new TestEvent(
-                result.getMethod().getQualifiedName(),
-                status,
-                error));
+        publish(registry, result.getMethod().getQualifiedName(), status, error);
+    }
+
+    static void publish(
+            ReporterRegistry registry,
+            String testName,
+            TestStatus status,
+            Throwable error) {
+        TestEvent event = new TestEvent(testName, status, error);
+        registry.publish(event);
+
+        if (status == TestStatus.FAILED) {
+            byte[] screenshot = captureScreenshot();
+            if (screenshot != null) {
+                registry.attachScreenshot(event, screenshot);
+            }
+        }
+    }
+
+    private static byte[] captureScreenshot() {
+        WebDriver driver = DriverContext.getDriver();
+        if (!(driver instanceof TakesScreenshot screenshotDriver)) {
+            return null;
+        }
+        try {
+            return screenshotDriver.getScreenshotAs(OutputType.BYTES);
+        } catch (RuntimeException e) {
+            log.warn("Could not capture screenshot for failed test", e);
+            return null;
+        }
     }
 }
