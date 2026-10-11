@@ -9,15 +9,6 @@ import org.testng.ITestResult;
 public final class TestNgAssertionListener implements IInvokedMethodListener {
 
     @Override
-    public void beforeInvocation(IInvokedMethod method, ITestResult testResult) {
-        if (!method.isTestMethod()) {
-            return;
-        }
-
-        AssertionContext.current();
-    }
-
-    @Override
     public void afterInvocation(IInvokedMethod method, ITestResult testResult) {
         if (!method.isTestMethod()) {
             return;

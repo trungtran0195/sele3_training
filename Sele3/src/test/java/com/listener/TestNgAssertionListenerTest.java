@@ -41,7 +41,6 @@ public class TestNgAssertionListenerTest {
         IInvokedMethod method = testMethod();
         ITestResult result = mock(ITestResult.class);
 
-        listener.beforeInvocation(method, result);
         AssertionContext.current().softTrue(false, "soft failure");
         listener.afterInvocation(method, result);
 
@@ -57,7 +56,6 @@ public class TestNgAssertionListenerTest {
         when(result.getThrowable()).thenReturn(hardFailure);
         when(result.getStatus()).thenReturn(ITestResult.FAILURE);
 
-        listener.beforeInvocation(method, result);
         AssertionContext.current().softTrue(false, "soft failure");
         listener.afterInvocation(method, result);
 
@@ -74,7 +72,6 @@ public class TestNgAssertionListenerTest {
         when(result.getStatus()).thenReturn(ITestResult.SUCCESS);
         when(result.getThrowable()).thenReturn(expectedException);
 
-        listener.beforeInvocation(method, result);
         AssertionContext.current().softTrue(false, "soft failure");
         listener.afterInvocation(method, result);
 
@@ -91,7 +88,6 @@ public class TestNgAssertionListenerTest {
         when(result.getStatus()).thenReturn(ITestResult.SKIP);
         when(result.getThrowable()).thenReturn(skipReason);
 
-        listener.beforeInvocation(method, result);
         AssertionContext.current().softTrue(false, "soft failure");
         listener.afterInvocation(method, result);
 
@@ -106,7 +102,6 @@ public class TestNgAssertionListenerTest {
         when(method.isTestMethod()).thenReturn(false);
         ITestResult result = mock(ITestResult.class);
 
-        listener.beforeInvocation(method, result);
         listener.afterInvocation(method, result);
 
         verify(result, never()).setThrowable(any());

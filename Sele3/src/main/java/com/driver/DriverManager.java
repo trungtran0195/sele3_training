@@ -2,9 +2,12 @@ package com.driver;
 
 import com.config.Configuration;
 import org.openqa.selenium.Dimension;
+import org.openqa.selenium.OutputType;
+import org.openqa.selenium.TakesScreenshot;
 import org.openqa.selenium.WebDriver;
 
 import java.util.Objects;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 
 public final class DriverManager {
@@ -53,6 +56,19 @@ public final class DriverManager {
 
     public static WebDriver getDriver() {
         return DRIVER.get();
+    }
+
+    public static byte[] captureScreenshot() {
+        WebDriver webDriver = DRIVER.get();
+        if (!(webDriver instanceof TakesScreenshot screenshotDriver)) {
+            return null;
+        }
+        try {
+            return screenshotDriver.getScreenshotAs(OutputType.BYTES);
+        } catch (RuntimeException e) {
+            LOGGER.log(Level.WARNING, "Could not capture screenshot", e);
+            return null;
+        }
     }
 
     public static void quitDriver() {
