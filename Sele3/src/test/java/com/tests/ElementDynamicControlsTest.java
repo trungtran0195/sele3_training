@@ -34,7 +34,11 @@ public class ElementDynamicControlsTest extends TestBase {
         page.clickTextBoxButton();
         page.waitUntilTextBoxEnabled();
 
+        Assert.assertTrue(page.isTextBoxEnabled(), "Textbox should be enabled");
+
         page.clickTextBoxButton();
         page.waitUntilTextBoxDisabled();
+
+        Assert.assertFalse(page.isTextBoxEnabled(), "Textbox should be disabled again");
     }
 }

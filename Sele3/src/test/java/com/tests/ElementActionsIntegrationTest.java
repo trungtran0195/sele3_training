@@ -13,14 +13,19 @@ public class ElementActionsIntegrationTest extends TestBase {
     private final PageNavigator navigator = new PageNavigator();
 
     @Test
-    public void shouldScrollToAndSelectDropdownOption() {
+    public void shouldSelectDropdownOptionsByTextValueAndIndex() {
         navigator.openDropdown();
         Element dropdown = Element.of(By.id("dropdown"));
 
         dropdown.scrollIntoView();
-        dropdown.selectByIndex(1);
+        dropdown.selectByVisibleText("Option 2");
+        Assert.assertEquals(dropdown.getAttribute("value"), "2");
 
+        dropdown.selectByValue("1");
         Assert.assertEquals(dropdown.getAttribute("value"), "1");
+
+        dropdown.selectByIndex(2);
+        Assert.assertEquals(dropdown.getAttribute("value"), "2");
     }
 
     @Test
@@ -44,5 +49,17 @@ public class ElementActionsIntegrationTest extends TestBase {
         figure.hover();
 
         Assert.assertTrue(caption.isDisplayed());
+    }
+
+    @Test
+    public void shouldCheckAndUncheckCheckbox() {
+        navigator.openCheckboxes();
+        Element checkbox = Element.of(By.cssSelector("input[type='checkbox']"));
+
+        checkbox.check();
+        Assert.assertTrue(checkbox.isSelected());
+
+        checkbox.uncheck();
+        Assert.assertFalse(checkbox.isSelected());
     }
 }

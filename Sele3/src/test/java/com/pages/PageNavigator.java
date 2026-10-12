@@ -10,6 +10,7 @@ public final class PageNavigator {
     private static final String DROPDOWN_URL = "https://the-internet.herokuapp.com/dropdown";
     private static final String INPUTS_URL = "https://the-internet.herokuapp.com/inputs";
     private static final String HOVERS_URL = "https://the-internet.herokuapp.com/hovers";
+    private static final String CHECKBOXES_URL = "https://the-internet.herokuapp.com/checkboxes";
 
     public void openDynamicControls() {
         DriverManager.getDriver().get(DYNAMIC_CONTROLS_URL);
@@ -25,5 +26,9 @@ public final class PageNavigator {
 
     public void openHovers() {
         DriverManager.getDriver().get(HOVERS_URL);
+    }
+
+    public void openCheckboxes() {
+        DriverManager.getDriver().get(CHECKBOXES_URL);
     }
 }
