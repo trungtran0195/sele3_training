@@ -26,17 +26,41 @@ public final class ReporterRegistry {
 
     public void publish(TestEvent event) {
         Objects.requireNonNull(event, "Test event must not be null");
+        notifyReporters(
+                event,
+                reporter -> reporter.report(event),
+                "while handling " + event.status());
+    }
+
+    public void attachScreenshot(TestEvent event, byte[] screenshot) {
+        Objects.requireNonNull(event, "Test event must not be null");
+        Objects.requireNonNull(screenshot, "Screenshot must not be null");
+        notifyReporters(
+                event,
+                reporter -> reporter.attachScreenshot(event, screenshot.clone()),
+                "to attach screenshot");
+    }
+
+    private void notifyReporters(
+            TestEvent event,
+            ReporterOperation operation,
+            String action) {
         for (Reporter reporter : reporters) {
             try {
-                reporter.report(event);
+                operation.accept(reporter);
             } catch (Exception e) {
                 log.warn(
-                        "Reporter {} failed while handling {} for test {}",
+                        "Reporter {} failed {} for test {}",
                         reporter.getClass().getName(),
-                        event.status(),
+                        action,
                         event.testName(),
                         e);
             }
         }
+    }
+
+    @FunctionalInterface
+    private interface ReporterOperation {
+        void accept(Reporter reporter) throws Exception;
     }
 }

@@ -1,6 +1,7 @@
 package com.listener;
 
 import com.config.ConfigurationException;
+import com.driver.DriverContext;
 import com.report.ConsoleReporter;
 import com.report.Reporter;
 import com.report.ReporterRegistry;
@@ -85,9 +86,22 @@ public class TestNgReporterListener implements ISuiteListener, ITestListener {
             throw new IllegalStateException("Reporter registry has not been initialized");
         }
 
-        registry.publish(new TestEvent(
-                result.getMethod().getQualifiedName(),
-                status,
-                error));
+        publish(registry, result.getMethod().getQualifiedName(), status, error);
+    }
+
+    static void publish(
+            ReporterRegistry registry,
+            String testName,
+            TestStatus status,
+            Throwable error) {
+        TestEvent event = new TestEvent(testName, status, error);
+        registry.publish(event);
+
+        if (status == TestStatus.FAILED) {
+            byte[] screenshot = DriverContext.captureScreenshot();
+            if (screenshot != null) {
+                registry.attachScreenshot(event, screenshot);
+            }
+        }
     }
 }

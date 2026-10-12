@@ -12,4 +12,8 @@ public final class DriverContext {
     public static Configuration getConfig() {
         return DriverManager.getConfig();
     }
+
+    public static byte[] captureScreenshot() {
+        return DriverManager.captureScreenshot();
+    }
 }

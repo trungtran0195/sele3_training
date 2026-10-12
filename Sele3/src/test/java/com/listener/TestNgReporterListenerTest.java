@@ -1,12 +1,19 @@
 package com.listener;
 
 import com.config.ConfigurationException;
+import com.driver.DriverContext;
 import com.report.ConsoleReporter;
+import com.report.Reporter;
 import com.report.ReporterRegistry;
+import com.report.TestEvent;
+import com.report.TestStatus;
+import org.mockito.MockedStatic;
 import org.testng.Assert;
 import org.testng.annotations.AfterMethod;
 import org.testng.annotations.BeforeMethod;
 import org.testng.annotations.Test;
+
+import static org.mockito.Mockito.mockStatic;
 
 public class TestNgReporterListenerTest {
 
@@ -70,5 +77,61 @@ public class TestNgReporterListenerTest {
         TestNgReporterListener.registerConfiguredReporters(
                 new ReporterRegistry(),
                 "unknown");
+    }
+
+    @Test
+    public void shouldAttachScreenshotWhenTestFails() {
+        ReporterRegistry registry = new ReporterRegistry();
+        RecordingReporter reporter = new RecordingReporter();
+        registry.register(reporter);
+        AssertionError failure = new AssertionError("failed");
+        byte[] screenshot = {1, 2, 3};
+
+        try (MockedStatic<DriverContext> context = mockStatic(DriverContext.class)) {
+            context.when(DriverContext::captureScreenshot).thenReturn(screenshot);
+            TestNgReporterListener.publish(
+                    registry,
+                    "tests.CheckoutTest.checkout",
+                    TestStatus.FAILED,
+                    failure);
+        }
+
+        Assert.assertSame(reporter.event.error(), failure);
+        Assert.assertEquals(reporter.screenshot, screenshot);
+    }
+
+    @Test
+    public void shouldKeepOriginalFailureWhenScreenshotCannotBeCaptured() {
+        ReporterRegistry registry = new ReporterRegistry();
+        RecordingReporter reporter = new RecordingReporter();
+        registry.register(reporter);
+        AssertionError failure = new AssertionError("failed");
+        try (MockedStatic<DriverContext> context = mockStatic(DriverContext.class)) {
+            context.when(DriverContext::captureScreenshot).thenReturn(null);
+            TestNgReporterListener.publish(
+                    registry,
+                    "tests.CheckoutTest.checkout",
+                    TestStatus.FAILED,
+                    failure);
+        }
+
+        Assert.assertSame(reporter.event.error(), failure);
+        Assert.assertNull(reporter.screenshot);
+    }
+
+    private static final class RecordingReporter implements Reporter {
+
+        private TestEvent event;
+        private byte[] screenshot;
+
+        @Override
+        public void report(TestEvent event) {
+            this.event = event;
+        }
+
+        @Override
+        public void attachScreenshot(TestEvent event, byte[] screenshot) {
+            this.screenshot = screenshot;
+        }
     }
 }
