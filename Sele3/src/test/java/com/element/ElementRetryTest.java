@@ -21,6 +21,7 @@ import static com.element.ElementTestSupport.webDriver;
 import static com.element.ElementTestSupport.webElement;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.times;
@@ -102,6 +103,18 @@ public class ElementRetryTest {
     }
 
     @Test
+    public void shouldScrollVisibleElementIntoView() {
+        WebElement webElement = webElement();
+        WebDriver driver = driverReturning(webElement);
+        JavascriptExecutor javascript = (JavascriptExecutor) driver;
+        when(webElement.isDisplayed()).thenReturn(true);
+
+        element(By.id("result"), driver).scrollIntoView();
+
+        verify(javascript).executeScript(anyString(), eq(webElement));
+    }
+
+    @Test
     public void shouldRetrySendKeysForInvalidElementState() {
         WebElement webElement = webElement();
         when(webElement.isDisplayed()).thenReturn(true);
@@ -127,6 +140,50 @@ public class ElementRetryTest {
 
         verify(webElement, times(2)).getDomProperty("readOnly");
         verify(webElement).sendKeys(any(CharSequence[].class));
+    }
+
+    @Test
+    public void shouldSetValueByClearingThenTyping() {
+        WebElement webElement = webElement();
+        when(webElement.isDisplayed()).thenReturn(true);
+        when(webElement.isEnabled()).thenReturn(true);
+        when(webElement.getDomProperty("readOnly")).thenReturn("false");
+
+        element(By.id("input"), driverReturning(webElement)).setValue("updated");
+
+        var order = inOrder(webElement);
+        order.verify(webElement).clear();
+        order.verify(webElement).sendKeys("updated");
+    }
+
+    @Test
+    public void shouldClearWithoutTypingWhenSetValueIsEmpty() {
+        WebElement webElement = webElement();
+        when(webElement.isDisplayed()).thenReturn(true);
+        when(webElement.isEnabled()).thenReturn(true);
+        when(webElement.getDomProperty("readOnly")).thenReturn("false");
+
+        element(By.id("input"), driverReturning(webElement)).setValue("");
+
+        verify(webElement).clear();
+        verify(webElement, org.mockito.Mockito.never()).sendKeys(any(CharSequence[].class));
+    }
+
+    @Test
+    public void shouldRetrySetValueWhenTheInputIsTemporarilyNotEditable() {
+        WebElement webElement = webElement();
+        when(webElement.isDisplayed()).thenReturn(true);
+        when(webElement.isEnabled()).thenReturn(true);
+        when(webElement.getDomProperty("readOnly")).thenReturn("false");
+        doThrow(new InvalidElementStateException("Temporarily not editable"))
+                .doNothing()
+                .when(webElement)
+                .clear();
+
+        element(By.id("input"), driverReturning(webElement)).setValue("updated");
+
+        verify(webElement, times(2)).clear();
+        verify(webElement).sendKeys("updated");
     }
 
     @Test

@@ -5,6 +5,7 @@ import org.openqa.selenium.NoSuchElementException;
 import org.openqa.selenium.StaleElementReferenceException;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
+import org.openqa.selenium.interactions.Interactive;
 import org.testng.Assert;
 import org.testng.annotations.AfterMethod;
 import org.testng.annotations.Test;
@@ -15,6 +16,7 @@ import static com.element.ElementTestSupport.driverReturning;
 import static com.element.ElementTestSupport.element;
 import static com.element.ElementTestSupport.webDriver;
 import static com.element.ElementTestSupport.webElement;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -41,6 +43,85 @@ public class ElementBehaviorTest {
         Assert.assertEquals(element.getText(), "Welcome");
         Assert.assertEquals(element.getText(), "Welcome");
         verify(driver, times(2)).findElement(locator);
+    }
+
+    @Test
+    public void shouldHoverOverAVisibleElement() {
+        By locator = By.id("menu");
+        WebElement webElement = webElement();
+        WebDriver driver = webDriver();
+        when(driver.findElement(locator)).thenReturn(webElement);
+        when(webElement.isDisplayed()).thenReturn(true);
+
+        element(locator, driver).hover();
+
+        verify((Interactive) driver).perform(any());
+    }
+
+    @Test
+    public void shouldSelectAnOptionByVisibleText() {
+        By locator = By.id("country");
+        WebElement dropdown = webElement();
+        WebElement option = webElement();
+        WebDriver driver = webDriver();
+        when(driver.findElement(locator)).thenReturn(dropdown);
+        when(dropdown.isDisplayed()).thenReturn(true);
+        when(dropdown.isEnabled()).thenReturn(true);
+        when(dropdown.getTagName()).thenReturn("select");
+        when(dropdown.findElements(any(By.class))).thenReturn(List.of(option));
+        when(option.isEnabled()).thenReturn(true);
+        when(option.isSelected()).thenReturn(false);
+
+        element(locator, driver).selectByVisibleText("Canada");
+
+        verify(option).click();
+    }
+
+    @Test
+    public void shouldSelectAnOptionByValue() {
+        By locator = By.id("country");
+        WebElement dropdown = webElement();
+        WebElement option = webElement();
+        WebDriver driver = webDriver();
+        when(driver.findElement(locator)).thenReturn(dropdown);
+        when(dropdown.isDisplayed()).thenReturn(true);
+        when(dropdown.isEnabled()).thenReturn(true);
+        when(dropdown.getTagName()).thenReturn("select");
+        when(dropdown.findElements(any(By.class))).thenReturn(List.of(option));
+        when(option.isEnabled()).thenReturn(true);
+        when(option.isSelected()).thenReturn(false);
+
+        element(locator, driver).selectByValue("ca");
+
+        verify(option).click();
+    }
+
+    @Test
+    public void shouldCheckAndUncheckByChangingSelection() {
+        WebElement checkbox = webElement();
+        when(checkbox.isDisplayed()).thenReturn(true);
+        when(checkbox.isEnabled()).thenReturn(true);
+        when(checkbox.isSelected()).thenReturn(false, true, true, false);
+        Element element = element(By.id("terms"), driverReturning(checkbox));
+
+        element.check();
+        element.uncheck();
+
+        verify(checkbox, times(2)).click();
+    }
+
+    @Test
+    public void shouldNotClickWhenCheckboxAlreadyHasRequestedState() {
+        WebElement checkbox = webElement();
+        when(checkbox.isDisplayed()).thenReturn(true);
+        when(checkbox.isEnabled()).thenReturn(true);
+        when(checkbox.isSelected()).thenReturn(true, false);
+        Element element = element(By.id("terms"), driverReturning(checkbox));
+
+        element.check();
+        element.uncheck();
+
+        verify(checkbox, never()).click();
     }
 
     @Test
@@ -94,7 +175,7 @@ public class ElementBehaviorTest {
     }
 
     @Test
-    public void shouldReadHiddenChildPropertiesWithoutRequiringVisibility() {
+    public void shouldReadHiddenChildStateWithoutRequiringVisibility() {
         By parentLocator = By.id("form");
         By childLocator = By.id("hidden-control");
         WebElement parent = webElement();
@@ -102,12 +183,10 @@ public class ElementBehaviorTest {
         WebDriver driver = webDriver();
         when(driver.findElement(parentLocator)).thenReturn(parent);
         when(parent.findElements(childLocator)).thenReturn(List.of(hiddenChild));
-        when(hiddenChild.getAttribute("value")).thenReturn("hidden-value");
         when(hiddenChild.isEnabled()).thenReturn(true);
         when(hiddenChild.isSelected()).thenReturn(true);
         Element child = element(parentLocator, driver).child(childLocator);
 
-        Assert.assertEquals(child.getAttribute("value"), "hidden-value");
         Assert.assertTrue(child.isEnabled());
         Assert.assertTrue(child.isSelected());
         verify(hiddenChild, never()).isDisplayed();

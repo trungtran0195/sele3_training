@@ -8,6 +8,7 @@ import org.openqa.selenium.By;
 import org.openqa.selenium.JavascriptExecutor;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
+import org.openqa.selenium.interactions.Interactive;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -47,7 +48,9 @@ final class ElementTestSupport {
     }
 
     static WebDriver webDriver() {
-        return mock(WebDriver.class, withSettings().extraInterfaces(JavascriptExecutor.class));
+        return mock(
+            WebDriver.class,
+            withSettings().extraInterfaces(JavascriptExecutor.class, Interactive.class));
     }
 
     static WebElement webElement() {
