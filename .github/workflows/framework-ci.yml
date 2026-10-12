@@ -1,0 +1,129 @@
+name: Framework CI/CD
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      browser:
+        description: Browser used by the parallel integration suite
+        required: true
+        default: chrome
+        type: choice
+        options:
+          - chrome
+          - firefox
+          - edge
+
+permissions:
+  contents: read
+
+env:
+  TEST_BROWSER: ${{ github.event.inputs.browser || 'chrome' }}
+
+jobs:
+  unit-tests:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Sele3
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: maven
+          cache-dependency-path: Sele3/pom.xml
+
+      - name: Run unit tests
+        run: mvn --batch-mode --no-transfer-progress test
+
+      - name: Upload unit-test reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-reports
+          path: Sele3/target/surefire-reports
+          if-no-files-found: ignore
+
+  parallel-browser-tests:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Sele3
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: maven
+          cache-dependency-path: Sele3/pom.xml
+
+      - name: Set up Chrome
+        if: env.TEST_BROWSER == 'chrome'
+        uses: browser-actions/setup-chrome@v2
+
+      - name: Set up Firefox
+        if: env.TEST_BROWSER == 'firefox'
+        uses: browser-actions/setup-firefox@v1
+
+      - name: Set up Edge
+        if: env.TEST_BROWSER == 'edge'
+        uses: browser-actions/setup-edge@v1
+
+      - name: Run parallel browser tests
+        run: >-
+          mvn --batch-mode --no-transfer-progress
+          -Pautomation-tests
+          -Dtestng.suite=src/test/resources/suite/parallel-testng.xml
+          -Dbrowser=${TEST_BROWSER}
+          -Dheadless=true
+          test
+
+      - name: Upload browser-test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-test-reports-${{ env.TEST_BROWSER }}
+          path: Sele3/target/surefire-reports
+          if-no-files-found: ignore
+
+  publish:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs:
+      - unit-tests
+      - parallel-browser-tests
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    defaults:
+      run:
+        working-directory: Sele3
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17 for GitHub Packages
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: maven
+          cache-dependency-path: Sele3/pom.xml
+          server-id: github
+          server-username: GITHUB_ACTOR
+          server-password: GITHUB_TOKEN
+
+      - name: Publish framework package
+        run: mvn --batch-mode --no-transfer-progress -DskipTests deploy
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
