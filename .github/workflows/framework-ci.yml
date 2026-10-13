@@ -14,12 +14,33 @@ on:
           - chrome
           - firefox
           - edge
+      headless:
+        description: Run browser tests in headless mode
+        required: true
+        default: true
+        type: boolean
+      timeout:
+        description: Framework wait timeout in milliseconds
+        required: true
+        default: 4000
+        type: number
+      suite:
+        description: TestNG suite used by browser tests
+        required: true
+        default: parallel-testng.xml
+        type: choice
+        options:
+          - parallel-testng.xml
+          - automation-testng.xml
 
 permissions:
   contents: read
 
 env:
   TEST_BROWSER: ${{ github.event.inputs.browser || 'chrome' }}
+  TEST_HEADLESS: ${{ github.event.inputs.headless || 'true' }}
+  TEST_TIMEOUT: ${{ github.event.inputs.timeout || '4000' }}
+  TEST_SUITE: ${{ github.event.inputs.suite || 'parallel-testng.xml' }}
 
 jobs:
   unit-tests:
@@ -83,9 +104,10 @@ jobs:
         run: >-
           mvn --batch-mode --no-transfer-progress
           -Pautomation-tests
-          -Dtestng.suite=src/test/resources/suite/parallel-testng.xml
+          -Dtestng.suite=src/test/resources/suite/${TEST_SUITE}
           -Dbrowser=${TEST_BROWSER}
-          -Dheadless=true
+          -Dheadless=${TEST_HEADLESS}
+          -Dtimeout=${TEST_TIMEOUT}
           test
 
       - name: Upload browser-test reports
