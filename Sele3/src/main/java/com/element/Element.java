@@ -140,13 +140,11 @@ public final class Element {
             if (element == null || !element.isEnabled() || isReadOnly(element)) {
                 return null;
             }
-            try {
-                element.sendKeys(keys);
-                return Boolean.TRUE;
-            } catch (InvalidElementStateException e) {
-                return null;
-            }
-        }).await();
+            element.sendKeys(keys);
+            return Boolean.TRUE;
+        })
+                .ignoring(InvalidElementStateException.class)
+                .await();
     }
 
     /** Waits until the element is editable, then clears it and enters the supplied value. */
@@ -157,16 +155,14 @@ public final class Element {
             if (element == null || !element.isEnabled() || isReadOnly(element)) {
                 return null;
             }
-            try {
-                element.clear();
-                if (!value.isEmpty()) {
-                    element.sendKeys(value);
-                }
-                return Boolean.TRUE;
-            } catch (InvalidElementStateException e) {
-                return null;
+            element.clear();
+            if (!value.isEmpty()) {
+                element.sendKeys(value);
             }
-        }).await();
+            return Boolean.TRUE;
+        })
+                .ignoring(InvalidElementStateException.class)
+                .await();
     }
 
     /** Waits until the element is visible and editable, then clears it. */
@@ -318,13 +314,11 @@ public final class Element {
             if (element == null || !element.isEnabled()) {
                 return null;
             }
-            try {
-                selection.accept(new Select(element));
-                return Boolean.TRUE;
-            } catch (InvalidElementStateException e) {
-                return null;
-            }
-        }).await();
+            selection.accept(new Select(element));
+            return Boolean.TRUE;
+        })
+                .ignoring(InvalidElementStateException.class)
+                .await();
     }
 
     private void setSelected(boolean selected) {
@@ -337,13 +331,11 @@ public final class Element {
             if (element.isSelected() == selected) {
                 return Boolean.TRUE;
             }
-            try {
-                element.click();
-            } catch (InvalidElementStateException e) {
-                return null;
-            }
+            element.click();
             return element.isSelected() == selected ? Boolean.TRUE : null;
-        }).await();
+        })
+                .ignoring(InvalidElementStateException.class)
+                .await();
     }
 
     private <T> ElementWait<T> createWait(
