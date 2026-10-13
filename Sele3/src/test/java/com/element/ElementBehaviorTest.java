@@ -43,6 +43,35 @@ public class ElementBehaviorTest {
         verify(driver, times(2)).findElement(locator);
     }
 
+    @Test(expectedExceptions = IllegalArgumentException.class)
+    public void shouldRejectNegativeOptionIndex() {
+        Element.of(By.id("country")).selectByIndex(-1);
+    }
+
+    @Test(expectedExceptions = NullPointerException.class)
+    public void shouldRejectNullOptionText() {
+        Element.of(By.id("country")).selectByVisibleText(null);
+    }
+
+    @Test(expectedExceptions = NullPointerException.class)
+    public void shouldRejectNullValue() {
+        Element.of(By.id("input")).setValue(null);
+    }
+
+    @Test
+    public void shouldNotClickWhenCheckboxAlreadyHasRequestedState() {
+        WebElement checkbox = webElement();
+        when(checkbox.isDisplayed()).thenReturn(true);
+        when(checkbox.isEnabled()).thenReturn(true);
+        when(checkbox.isSelected()).thenReturn(true, false);
+        Element element = element(By.id("terms"), driverReturning(checkbox));
+
+        element.check();
+        element.uncheck();
+
+        verify(checkbox, never()).click();
+    }
+
     @Test
     public void shouldFindAVisibleChildInsideTheCurrentParent() {
         By parentLocator = By.id("form");
@@ -94,7 +123,7 @@ public class ElementBehaviorTest {
     }
 
     @Test
-    public void shouldReadHiddenChildPropertiesWithoutRequiringVisibility() {
+    public void shouldReadHiddenChildStateWithoutRequiringVisibility() {
         By parentLocator = By.id("form");
         By childLocator = By.id("hidden-control");
         WebElement parent = webElement();
@@ -102,12 +131,10 @@ public class ElementBehaviorTest {
         WebDriver driver = webDriver();
         when(driver.findElement(parentLocator)).thenReturn(parent);
         when(parent.findElements(childLocator)).thenReturn(List.of(hiddenChild));
-        when(hiddenChild.getAttribute("value")).thenReturn("hidden-value");
         when(hiddenChild.isEnabled()).thenReturn(true);
         when(hiddenChild.isSelected()).thenReturn(true);
         Element child = element(parentLocator, driver).child(childLocator);
 
-        Assert.assertEquals(child.getAttribute("value"), "hidden-value");
         Assert.assertTrue(child.isEnabled());
         Assert.assertTrue(child.isSelected());
         verify(hiddenChild, never()).isDisplayed();

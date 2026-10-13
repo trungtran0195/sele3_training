@@ -13,6 +13,8 @@ import org.openqa.selenium.NoSuchElementException;
 import org.openqa.selenium.StaleElementReferenceException;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
+import org.openqa.selenium.interactions.Actions;
+import org.openqa.selenium.support.ui.Select;
 
 import java.util.List;
 import java.util.Objects;
@@ -72,6 +74,60 @@ public final class Element {
         }).await();
     }
 
+    /** Waits until the element is visible, then moves the pointer over it. */
+    public void hover() {
+        createWait("hover over element", currentDriver -> {
+            WebElement element = findVisible(currentDriver);
+            if (element == null) {
+                return null;
+            }
+            new Actions(currentDriver).moveToElement(element).perform();
+            return Boolean.TRUE;
+        }).await();
+    }
+
+    /** Waits until the element is visible, then scrolls it to the center of the viewport. */
+    public void scrollIntoView() {
+        createWait("scroll element into view", currentDriver -> {
+            WebElement element = findVisible(currentDriver);
+            if (element == null) {
+                return null;
+            }
+            scrollToCenter(currentDriver, element);
+            return Boolean.TRUE;
+        }).await();
+    }
+
+    /** Selects an option in a native {@code <select>} element by its visible text. */
+    public void selectByVisibleText(String text) {
+        Objects.requireNonNull(text, "Option text must not be null");
+        selectOption("select option by visible text", select -> select.selectByVisibleText(text));
+    }
+
+    /** Selects an option in a native {@code <select>} element by its value attribute. */
+    public void selectByValue(String value) {
+        Objects.requireNonNull(value, "Option value must not be null");
+        selectOption("select option by value", select -> select.selectByValue(value));
+    }
+
+    /** Selects an option in a native {@code <select>} element by its zero-based index. */
+    public void selectByIndex(int index) {
+        if (index < 0) {
+            throw new IllegalArgumentException("Option index must not be negative");
+        }
+        selectOption("select option by index", select -> select.selectByIndex(index));
+    }
+
+    /** Selects this element if it is not already selected. */
+    public void check() {
+        setSelected(true);
+    }
+
+    /** Deselects this element if it is currently selected. */
+    public void uncheck() {
+        setSelected(false);
+    }
+
     /**
      * Waits until the element is visible, then sends the supplied keys.
      *
@@ -84,13 +140,29 @@ public final class Element {
             if (element == null || !element.isEnabled() || isReadOnly(element)) {
                 return null;
             }
-            try {
-                element.sendKeys(keys);
-                return Boolean.TRUE;
-            } catch (InvalidElementStateException e) {
+            element.sendKeys(keys);
+            return Boolean.TRUE;
+        })
+                .ignoring(InvalidElementStateException.class)
+                .await();
+    }
+
+    /** Waits until the element is editable, then clears it and enters the supplied value. */
+    public void setValue(String value) {
+        Objects.requireNonNull(value, "Value must not be null");
+        createWait("set element value", currentDriver -> {
+            WebElement element = findVisible(currentDriver);
+            if (element == null || !element.isEnabled() || isReadOnly(element)) {
                 return null;
             }
-        }).await();
+            element.clear();
+            if (!value.isEmpty()) {
+                element.sendKeys(value);
+            }
+            return Boolean.TRUE;
+        })
+                .ignoring(InvalidElementStateException.class)
+                .await();
     }
 
     /** Waits until the element is visible and editable, then clears it. */
@@ -234,6 +306,36 @@ public final class Element {
             action.accept(element);
             return Boolean.TRUE;
         });
+    }
+
+    private void selectOption(String actionDescription, Consumer<Select> selection) {
+        createWait(actionDescription, currentDriver -> {
+            WebElement element = findVisible(currentDriver);
+            if (element == null || !element.isEnabled()) {
+                return null;
+            }
+            selection.accept(new Select(element));
+            return Boolean.TRUE;
+        })
+                .ignoring(InvalidElementStateException.class)
+                .await();
+    }
+
+    private void setSelected(boolean selected) {
+        String actionDescription = selected ? "check element" : "uncheck element";
+        createWait(actionDescription, currentDriver -> {
+            WebElement element = findVisible(currentDriver);
+            if (element == null || !element.isEnabled()) {
+                return null;
+            }
+            if (element.isSelected() == selected) {
+                return Boolean.TRUE;
+            }
+            element.click();
+            return element.isSelected() == selected ? Boolean.TRUE : null;
+        })
+                .ignoring(InvalidElementStateException.class)
+                .await();
     }
 
     private <T> ElementWait<T> createWait(

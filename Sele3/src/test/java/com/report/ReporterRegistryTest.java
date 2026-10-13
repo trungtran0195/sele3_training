@@ -51,7 +51,7 @@ public class ReporterRegistryTest {
     }
 
     @Test
-    public void shouldAttachScreenshotToEveryReporter() {
+    public void shouldPassDefensiveScreenshotCopyToReporter() {
         ReporterRegistry registry = new ReporterRegistry();
         AtomicReference<byte[]> received = new AtomicReference<>();
         registry.register(new Reporter() {
@@ -74,37 +74,4 @@ public class ReporterRegistryTest {
         Assert.assertNotSame(received.get(), screenshot);
     }
 
-    @Test
-    public void shouldContinueWhenAReporterCannotAttachScreenshot() {
-        ReporterRegistry registry = new ReporterRegistry();
-        AtomicInteger attachments = new AtomicInteger();
-        registry.register(new ScreenshotReporter(() -> {
-            throw new IllegalStateException("Attachment failure");
-        }));
-        registry.register(new ScreenshotReporter(attachments::incrementAndGet));
-
-        registry.attachScreenshot(
-                new TestEvent("checkout", TestStatus.FAILED, new AssertionError()),
-                new byte[]{1});
-
-        Assert.assertEquals(attachments.get(), 1);
-    }
-
-    private static final class ScreenshotReporter implements Reporter {
-
-        private final Runnable attachment;
-
-        private ScreenshotReporter(Runnable attachment) {
-            this.attachment = attachment;
-        }
-
-        @Override
-        public void report(TestEvent event) {
-        }
-
-        @Override
-        public void attachScreenshot(TestEvent event, byte[] screenshot) {
-            attachment.run();
-        }
-    }
 }

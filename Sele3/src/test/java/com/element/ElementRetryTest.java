@@ -9,6 +9,7 @@ import org.openqa.selenium.StaleElementReferenceException;
 import org.openqa.selenium.TimeoutException;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
+import org.openqa.selenium.interactions.Interactive;
 import org.testng.Assert;
 import org.testng.annotations.AfterMethod;
 import org.testng.annotations.Test;
@@ -21,6 +22,7 @@ import static com.element.ElementTestSupport.webDriver;
 import static com.element.ElementTestSupport.webElement;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.times;
@@ -102,6 +104,38 @@ public class ElementRetryTest {
     }
 
     @Test
+    public void shouldRetryScrollingAfterAStaleElement() {
+        WebElement webElement = webElement();
+        WebDriver driver = driverReturning(webElement);
+        JavascriptExecutor javascript = (JavascriptExecutor) driver;
+        when(webElement.isDisplayed()).thenReturn(true);
+        doThrow(new StaleElementReferenceException("replaced"))
+                .doReturn(null)
+                .when(javascript)
+                .executeScript(anyString(), eq(webElement));
+
+        element(By.id("result"), driver).scrollIntoView();
+
+        verify(javascript, times(2)).executeScript(anyString(), eq(webElement));
+    }
+
+    @Test
+    public void shouldRetryHoveringAfterAStaleElement() {
+        WebElement webElement = webElement();
+        WebDriver driver = driverReturning(webElement);
+        Interactive interactive = (Interactive) driver;
+        when(webElement.isDisplayed()).thenReturn(true);
+        doThrow(new StaleElementReferenceException("replaced"))
+                .doNothing()
+                .when(interactive)
+                .perform(any());
+
+        element(By.id("menu"), driver).hover();
+
+        verify(interactive, times(2)).perform(any());
+    }
+
+    @Test
     public void shouldRetrySendKeysForInvalidElementState() {
         WebElement webElement = webElement();
         when(webElement.isDisplayed()).thenReturn(true);
@@ -127,6 +161,53 @@ public class ElementRetryTest {
 
         verify(webElement, times(2)).getDomProperty("readOnly");
         verify(webElement).sendKeys(any(CharSequence[].class));
+    }
+
+    @Test
+    public void shouldClearWithoutTypingWhenSetValueIsEmpty() {
+        WebElement webElement = webElement();
+        when(webElement.isDisplayed()).thenReturn(true);
+        when(webElement.isEnabled()).thenReturn(true);
+        when(webElement.getDomProperty("readOnly")).thenReturn("false");
+
+        element(By.id("input"), driverReturning(webElement)).setValue("");
+
+        verify(webElement).clear();
+        verify(webElement, org.mockito.Mockito.never()).sendKeys(any(CharSequence[].class));
+    }
+
+    @Test
+    public void shouldRetrySetValueWhenTheInputIsTemporarilyNotEditable() {
+        WebElement webElement = webElement();
+        when(webElement.isDisplayed()).thenReturn(true);
+        when(webElement.isEnabled()).thenReturn(true);
+        when(webElement.getDomProperty("readOnly")).thenReturn("false");
+        doThrow(new InvalidElementStateException("Temporarily not editable"))
+                .doNothing()
+                .when(webElement)
+                .clear();
+
+        element(By.id("input"), driverReturning(webElement)).setValue("updated");
+
+        verify(webElement, times(2)).clear();
+        verify(webElement).sendKeys("updated");
+    }
+
+    @Test
+    public void shouldRetrySetValueWhenTypingTemporarilyFails() {
+        WebElement webElement = webElement();
+        when(webElement.isDisplayed()).thenReturn(true);
+        when(webElement.isEnabled()).thenReturn(true);
+        when(webElement.getDomProperty("readOnly")).thenReturn("false");
+        doThrow(new InvalidElementStateException("Temporarily not editable"))
+                .doNothing()
+                .when(webElement)
+                .sendKeys(any(CharSequence[].class));
+
+        element(By.id("input"), driverReturning(webElement)).setValue("updated");
+
+        verify(webElement, times(2)).clear();
+        verify(webElement, times(2)).sendKeys(any(CharSequence[].class));
     }
 
     @Test
