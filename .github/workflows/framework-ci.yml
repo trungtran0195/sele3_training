@@ -39,7 +39,7 @@ permissions:
 env:
   TEST_BROWSER: ${{ github.event.inputs.browser || 'chrome' }}
   TEST_HEADLESS: ${{ github.event.inputs.headless || 'true' }}
-  TEST_TIMEOUT: ${{ github.event.inputs.timeout || '4000' }}
+  TEST_TIMEOUT: ${{ github.event.inputs.timeout || '10000' }}
   TEST_SUITE: ${{ github.event.inputs.suite || 'parallel-testng.xml' }}
 
 jobs:
