@@ -4,9 +4,12 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>org.example</groupId>
-    <artifactId>Selenium3</artifactId>
-    <version>1.0-SNAPSHOT</version>
+    <groupId>io.github.trungtran0195</groupId>
+    <artifactId>selenium-framework</artifactId>
+    <version>1.0.0-SNAPSHOT</version>
+    <name>Selenium Framework</name>
+    <description>Extensible Selenium test automation framework with TestNG integration.</description>
+    <url>https://github.com/trungtran0195/sele3_training</url>
 
     <properties>
         <maven.compiler.release>17</maven.compiler.release>
@@ -23,6 +26,8 @@
         <aspectj.version>1.9.20</aspectj.version>
         <compiler.version>3.13.0</compiler.version>
         <surefire.version>3.2.5</surefire.version>
+        <javadoc.version>3.11.2</javadoc.version>
+        <source.version>3.3.1</source.version>
         <testng.suite>src/test/resources/suite/unit-testng.xml</testng.suite>
     </properties>
 
@@ -138,6 +143,35 @@
                     <reportDirectory>${project.build.directory}/site/allure-maven-plugin</reportDirectory>
                 </configuration>
             </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-source-plugin</artifactId>
+                <version>${source.version}</version>
+                <executions>
+                    <execution>
+                        <id>attach-sources</id>
+                        <goals>
+                            <goal>jar-no-fork</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-javadoc-plugin</artifactId>
+                <version>${javadoc.version}</version>
+                <configuration>
+                    <doclint>none</doclint>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>attach-javadocs</id>
+                        <goals>
+                            <goal>jar</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
         </plugins>
     </build>
     <profiles>
@@ -148,4 +182,11 @@
             </properties>
         </profile>
     </profiles>
+    <distributionManagement>
+        <repository>
+            <id>github</id>
+            <name>GitHub Packages</name>
+            <url>https://maven.pkg.github.com/trungtran0195/sele3_training</url>
+        </repository>
+    </distributionManagement>
 </project>

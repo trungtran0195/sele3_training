@@ -98,19 +98,31 @@ public final class Element {
         }).await();
     }
 
-    /** Selects an option in a native {@code <select>} element by its visible text. */
+    /**
+     * Selects an option in a native {@code <select>} element by its visible text.
+     *
+     * @param text exact visible option text
+     */
     public void selectByVisibleText(String text) {
         Objects.requireNonNull(text, "Option text must not be null");
         selectOption("select option by visible text", select -> select.selectByVisibleText(text));
     }
 
-    /** Selects an option in a native {@code <select>} element by its value attribute. */
+    /**
+     * Selects an option in a native {@code <select>} element by its value attribute.
+     *
+     * @param value option value attribute
+     */
     public void selectByValue(String value) {
         Objects.requireNonNull(value, "Option value must not be null");
         selectOption("select option by value", select -> select.selectByValue(value));
     }
 
-    /** Selects an option in a native {@code <select>} element by its zero-based index. */
+    /**
+     * Selects an option in a native {@code <select>} element by its zero-based index.
+     *
+     * @param index zero-based option index
+     */
     public void selectByIndex(int index) {
         if (index < 0) {
             throw new IllegalArgumentException("Option index must not be negative");
@@ -147,7 +159,11 @@ public final class Element {
                 .await();
     }
 
-    /** Waits until the element is editable, then clears it and enters the supplied value. */
+    /**
+     * Waits until the element is editable, then clears it and enters the supplied value.
+     *
+     * @param value replacement value; an empty value only clears the element
+     */
     public void setValue(String value) {
         Objects.requireNonNull(value, "Value must not be null");
         createWait("set element value", currentDriver -> {
@@ -200,7 +216,11 @@ public final class Element {
                 .value();
     }
 
-    /** Returns the element's current displayed state without waiting. */
+    /**
+     * Returns the element's current displayed state without waiting.
+     *
+     * @return {@code true} when the element currently exists and is displayed
+     */
     public boolean isDisplayed() {
         WebDriver driver = DriverContext.getDriver();
         try {

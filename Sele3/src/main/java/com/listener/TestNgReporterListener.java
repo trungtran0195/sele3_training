@@ -5,6 +5,7 @@ import com.driver.DriverContext;
 import com.report.ConsoleReporter;
 import com.report.Reporter;
 import com.report.ReporterRegistry;
+import com.report.ScreenshotReporter;
 import com.report.TestEvent;
 import com.report.TestStatus;
 import org.testng.ISuite;
@@ -25,7 +26,8 @@ public class TestNgReporterListener implements ISuiteListener, ITestListener {
     public static final String REGISTRY_ATTRIBUTE = ReporterRegistry.class.getName();
 
     private static final Map<String, Supplier<Reporter>> REPORTER_FACTORIES = Map.of(
-            "console", ConsoleReporter::new);
+            "console", ConsoleReporter::new,
+            "screenshot", ScreenshotReporter::new);
 
     @Override
     public void onStart(ISuite suite) {
