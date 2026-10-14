@@ -39,7 +39,7 @@ mvn -Pautomation-tests \
   test
 ```
 
-Each parallel test method receives its own `Configuration`, `WebDriver`, and assertion session through `ThreadLocal` lifecycle managers.
+Each parallel test class receives its own `Configuration`, `WebDriver`, and assertion session through `ThreadLocal` lifecycle managers.
 
 ## Configuration
 

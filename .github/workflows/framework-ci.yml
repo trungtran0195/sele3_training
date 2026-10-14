@@ -2,7 +2,11 @@ name: Framework CI/CD
 
 on:
   push:
+    branches:
+      - main
   pull_request:
+    branches:
+      - main
   workflow_dispatch:
     inputs:
       browser:
@@ -22,7 +26,7 @@ on:
       timeout:
         description: Framework wait timeout in milliseconds
         required: true
-        default: 4000
+        default: 10000
         type: number
       suite:
         description: TestNG suite used by browser tests
@@ -59,6 +63,7 @@ jobs:
           java-version: "17"
           cache: maven
           cache-dependency-path: Sele3/pom.xml
+          overwrite-settings: false
 
       - name: Run unit tests
         run: mvn --batch-mode --no-transfer-progress test
@@ -87,10 +92,7 @@ jobs:
           java-version: "17"
           cache: maven
           cache-dependency-path: Sele3/pom.xml
-
-      - name: Set up Chrome
-        if: env.TEST_BROWSER == 'chrome'
-        uses: browser-actions/setup-chrome@v2
+          overwrite-settings: false
 
       - name: Set up Firefox
         if: env.TEST_BROWSER == 'firefox'
@@ -115,7 +117,9 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: browser-test-reports-${{ env.TEST_BROWSER }}
-          path: Sele3/target/surefire-reports
+          path: |
+            Sele3/target/surefire-reports
+            Sele3/target/screenshots
           if-no-files-found: ignore
 
   publish:
